@@ -1,0 +1,45 @@
+pf_public_ru 01 [] PASS makespan=1164.1 gen=5.2s coll=0 
+pf_public_ru 02 [] PASS makespan=1669.2 gen=10.3s coll=0 
+pf_public_ru 03 [] PASS makespan=1631.0 gen=6.6s coll=0 
+pf_public_ru 04 [] PASS makespan=30777.2 gen=108.7s coll=0 
+pf_public_ru 05 [] PASS makespan=83276.7 gen=100.2s coll=0 
+pf_public_ru 06 [] PASS makespan=5895.6 gen=8.5s coll=0 
+pf_public_ru 완료 → C:\Users\김호수\waam_icpbl\v0\results\pf_public_ru.csv
+pf_h505_ru 01 [중간] PASS makespan=21989.0 gen=58.9s coll=0 
+pf_h505_ru 02 [중간] PASS makespan=37479.4 gen=59.5s coll=0 
+pf_h505_ru 03 [중간] PASS makespan=4887.9 gen=13.4s coll=0 
+pf_h505_ru 04 [어려움] PASS makespan=28110.4 gen=98.7s coll=0 
+pf_h505_ru 05 [쉬움] PASS makespan=5920.4 gen=4.0s coll=0 
+pf_h505_ru 06 [쉬움] PASS makespan=14297.2 gen=8.4s coll=0 
+pf_h505_ru 07 [어려움] PASS makespan=3824.2 gen=5.8s coll=0 
+pf_h505_ru 08 [쉬움] PASS makespan=8223.9 gen=13.3s coll=0 
+pf_h505_ru 09 [쉬움] PASS makespan=13235.2 gen=35.3s coll=0 
+pf_h505_ru 10 [중간] PASS makespan=7569.8 gen=13.4s coll=0 
+pf_h505_ru 11 [중간] PASS makespan=11359.8 gen=16.7s coll=0 
+pf_h505_ru 12 [쉬움] PASS makespan=199.2 gen=2.0s coll=0 
+pf_h505_ru 13 [중간] PASS makespan=6336.0 gen=11.3s coll=0 
+pf_h505_ru 14 [어려움] PASS makespan=22206.7 gen=69.4s coll=0 
+pf_h505_ru 15 [중간] PASS makespan=3933.6 gen=12.1s coll=0 
+pf_h505_ru 완료 → C:\Users\김호수\waam_icpbl\v0\results\pf_h505_ru.csv
+pf_h404_ru 01 [어려움] PASS makespan=1110.7 gen=3.5s coll=0 
+pf_h404_ru 02 [어려움] PASS makespan=14399.9 gen=49.7s coll=0 
+pf_h404_ru 03 [쉬움] PASS makespan=3903.3 gen=8.2s coll=0 
+pf_h404_ru 04 [중간] PASS makespan=47527.4 gen=119.7s coll=0 
+pf_h404_ru 05 [중간] PASS makespan=4528.1 gen=18.0s coll=0 
+pf_h404_ru 06 [쉬움] PASS makespan=4307.1 gen=3.8s coll=0 
+pf_h404_ru 07 [쉬움] PASS makespan=3689.7 gen=6.1s coll=0 
+pf_h404_ru 08 [중간] PASS makespan=9374.6 gen=25.2s coll=0 
+pf_h404_ru 09 [중간] PASS makespan=6663.9 gen=10.2s coll=0 
+pf_h404_ru 10 [쉬움] PASS makespan=4035.6 gen=17.3s coll=0 
+pf_h404_ru 11 [중간] PASS makespan=12560.9 gen=23.4s coll=0 
+pf_h404_ru 12 [중간] PASS makespan=3543.5 gen=8.7s coll=0 
+pf_h404_ru 13 [쉬움] PASS makespan=6797.6 gen=13.8s coll=0 
+pf_h404_ru 14 [중간] PASS makespan=6395.3 gen=10.2s coll=0 
+pf_h404_ru 15 [어려움] PASS makespan=10687.5 gen=52.3s coll=0 
+pf_h404_ru 완료 → C:\Users\김호수\waam_icpbl\v0\results\pf_h404_ru.csv
+pf_valid_ru 01 [쉬움] PASS makespan=185.6 gen=3.9s coll=0 
+pf_valid_ru 02 [중간] PASS makespan=6254.0 gen=10.0s coll=0 
+pf_valid_ru 03 [쉬움] PASS makespan=841.6 gen=4.7s coll=0 
+pf_valid_ru 04 [쉬움] PASS makespan=586.0 gen=2.2s coll=0 
+pf_valid_ru 05 [어려움] PASS makespan=1158.8 gen=3.3s coll=0 
+EVAL_DONE

@@ -1,0 +1,56 @@
+pf_public_pp 01 [] PASS makespan=1160.3 gen=6.8s coll=0 
+pf_public_pp 02 [] PASS makespan=1700.0 gen=15.3s coll=0 
+pf_public_pp 03 [] PASS makespan=1674.7 gen=11.2s coll=0 
+pf_public_pp 04 [] PASS makespan=30757.0 gen=114.9s coll=0 
+pf_public_pp 05 [] PASS makespan=83660.0 gen=124.3s coll=0 
+pf_public_pp 06 [] PASS makespan=5936.7 gen=9.0s coll=0 
+pf_public_pp 완료 → C:\Users\김호수\waam_icpbl\v0\results\pf_public_pp.csv
+pf_valid_pp 01 [쉬움] PASS makespan=184.4 gen=3.7s coll=0 
+pf_valid_pp 02 [중간] PASS makespan=5985.1 gen=14.3s coll=0 
+pf_valid_pp 03 [쉬움] PASS makespan=841.7 gen=6.5s coll=0 
+pf_valid_pp 04 [쉬움] PASS makespan=586.0 gen=3.1s coll=0 
+pf_valid_pp 05 [어려움] PASS makespan=1161.2 gen=4.4s coll=0 
+pf_valid_pp 06 [쉬움] PASS makespan=12115.9 gen=19.1s coll=0 
+pf_valid_pp 07 [쉬움] PASS makespan=4667.4 gen=6.9s coll=0 
+pf_valid_pp 08 [중간] PASS makespan=2198.1 gen=7.9s coll=0 
+pf_valid_pp 09 [중간] PASS makespan=547.0 gen=5.2s coll=0 
+pf_valid_pp 10 [쉬움] PASS makespan=10370.2 gen=10.0s coll=0 
+pf_valid_pp 11 [중간] PASS makespan=2505.1 gen=10.2s coll=0 
+pf_valid_pp 12 [중간] PASS makespan=18647.5 gen=35.0s coll=0 
+pf_valid_pp 13 [어려움] PASS makespan=21009.7 gen=96.7s coll=0 
+pf_valid_pp 14 [쉬움] PASS makespan=4283.3 gen=9.1s coll=0 
+pf_valid_pp 15 [중간] PASS makespan=2039.7 gen=13.3s coll=0 
+pf_valid_pp 16 [중간] PASS makespan=5136.0 gen=12.3s coll=0 
+pf_valid_pp 17 [어려움] PASS makespan=34291.2 gen=63.8s coll=0 
+pf_valid_pp 18 [쉬움] PASS makespan=2964.3 gen=31.6s coll=0 
+pf_valid_pp 19 [쉬움] GEN_FAIL makespan= gen=10.7s coll= [WinError 5] 액세스가 거부되었습니다: 'C:\\Users\\김호수\\waam_icpbl\\jobs_eval\\pf_valid_pp\\
+pf_valid_pp 20 [쉬움] PASS makespan=3774.2 gen=7.5s coll=0 
+pf_valid_pp 완료 → C:\Users\김호수\waam_icpbl\v0\results\pf_valid_pp.csv
+pf_bench_pp 01 [] PASS makespan=3477.5 gen=15.3s coll=0 
+pf_bench_pp 02 [] PASS makespan=643.6 gen=7.4s coll=0 
+pf_bench_pp 03 [] PASS makespan=1111.1 gen=9.8s coll=0 
+pf_bench_pp 04 [] PASS makespan=963.2 gen=7.0s coll=0 
+pf_bench_pp 05 [] PASS makespan=904.2 gen=4.9s coll=0 
+pf_bench_pp 06 [] PASS makespan=1160.3 gen=7.8s coll=0 
+pf_bench_pp 07 [] PASS makespan=2202.7 gen=30.8s coll=0 
+pf_bench_pp 08 [] PASS makespan=1700.0 gen=13.6s coll=0 
+pf_bench_pp 09 [] PASS makespan=1674.7 gen=9.4s coll=0 
+pf_bench_pp 10 [] PASS makespan=984.0 gen=5.7s coll=0 
+pf_bench_pp 완료 → C:\Users\김호수\waam_icpbl\v0\results\pf_bench_pp.csv
+pf_test_pp 01 [중간] PASS makespan=10072.8 gen=22.4s coll=0 
+pf_test_pp 02 [어려움] PASS makespan=17867.0 gen=54.2s coll=0 
+pf_test_pp 03 [쉬움] PASS makespan=8556.5 gen=19.6s coll=0 
+pf_test_pp 04 [중간] PASS makespan=19052.1 gen=39.5s coll=0 
+pf_test_pp 05 [중간] PASS makespan=3089.7 gen=14.8s coll=0 
+pf_test_pp 06 [중간] PASS makespan=28565.1 gen=72.4s coll=0 
+pf_test_pp 07 [중간] PASS makespan=1221.3 gen=5.5s coll=0 
+pf_test_pp 08 [중간] PASS makespan=2870.5 gen=9.2s coll=0 
+pf_test_pp 09 [어려움] PASS makespan=1608.2 gen=4.8s coll=0 
+pf_test_pp 10 [쉬움] PASS makespan=4579.3 gen=7.8s coll=0 
+pf_test_pp 11 [쉬움] PASS makespan=1490.9 gen=10.0s coll=0 
+pf_test_pp 12 [중간] PASS makespan=913.7 gen=17.1s coll=0 
+pf_test_pp 13 [쉬움] PASS makespan=11028.1 gen=10.2s coll=0 
+pf_test_pp 14 [쉬움] PASS makespan=734.8 gen=3.4s coll=0 
+pf_test_pp 15 [어려움] PASS makespan=5844.8 gen=35.7s coll=0 
+pf_test_pp 완료 → C:\Users\김호수\waam_icpbl\v0\results\pf_test_pp.csv
+EVAL_DONE

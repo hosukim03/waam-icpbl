@@ -1,0 +1,17 @@
+pf_test 01 [중간] PASS makespan=10072.8 gen=20.8s coll=0 
+pf_test 02 [어려움] PASS makespan=19557.1 gen=79.8s coll=0 
+pf_test 03 [쉬움] PASS makespan=8556.5 gen=27.8s coll=0 
+pf_test 04 [중간] PASS makespan=20141.5 gen=62.7s coll=0 
+pf_test 05 [중간] PASS makespan=3089.7 gen=23.9s coll=0 
+pf_test 06 [중간] PASS makespan=28565.1 gen=98.7s coll=0 
+pf_test 07 [중간] PASS makespan=1338.0 gen=13.8s coll=0 
+pf_test 08 [중간] PASS makespan=2870.5 gen=16.8s coll=0 
+pf_test 09 [어려움] PASS makespan=1608.2 gen=9.3s coll=0 
+pf_test 10 [쉬움] PASS makespan=4579.3 gen=14.9s coll=0 
+pf_test 11 [쉬움] PASS makespan=1532.6 gen=21.0s coll=0 
+pf_test 12 [중간] PASS makespan=913.7 gen=34.7s coll=0 
+pf_test 13 [쉬움] PASS makespan=11028.1 gen=26.5s coll=0 
+pf_test 14 [쉬움] PASS makespan=734.8 gen=5.0s coll=0 
+pf_test 15 [어려움] PASS makespan=5747.3 gen=75.4s coll=0 
+pf_test 완료 → C:\Users\김호수\waam_icpbl\v0\results\pf_test.csv
+EVAL_DONE

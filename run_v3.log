@@ -1,0 +1,23 @@
+01: layers=6 rows=1098 makespan=1421.0s (0.39h) self_min_IoU=0.997 gen=4.7s
+01 exit=0
+02: layers=8 rows=3312 makespan=2158.9s (0.60h) self_min_IoU=0.996 gen=12.3s
+02 exit=0
+03: layers=6 rows=1389 makespan=2118.6s (0.59h) self_min_IoU=0.987 gen=9.3s
+03 exit=0
+06: layers=51 rows=4295 makespan=8609.5s (2.39h) self_min_IoU=0.995 gen=2.9s
+06 exit=0
+04: layers=50 rows=92355 makespan=49584.9s (13.77h) self_min_IoU=0.969 gen=51.7s
+04 exit=0
+01 ref_exit=1 ours_exit=0 | 01: layers=6 rows=5017 makespan=3992.6s (1.11h) self_min_IoU=0.942 gen=14.6s
+02 ref_exit=0 ours_exit=0 | 02: layers=8 rows=1475 makespan=1006.9s (0.28h) self_min_IoU=0.994 gen=8.9s
+03 ref_exit=0 ours_exit=0 | 03: layers=7 rows=2189 makespan=1586.2s (0.44h) self_min_IoU=0.993 gen=12.0s
+04 ref_exit=0 ours_exit=0 | 04: layers=6 rows=772 makespan=1220.0s (0.34h) self_min_IoU=0.991 gen=9.6s
+05 ref_exit=1 ours_exit=0 | 05: layers=5 rows=442 makespan=1164.9s (0.32h) self_min_IoU=1.000 gen=2.0s
+06 ref_exit=0 ours_exit=0 | 06: layers=6 rows=1098 makespan=1421.0s (0.39h) self_min_IoU=0.997 gen=4.9s
+07 ref_exit=1 ours_exit=0 | 07: layers=7 rows=4154 makespan=3244.5s (0.90h) self_min_IoU=0.992 gen=28.1s
+08 ref_exit=0 ours_exit=0 | 08: layers=8 rows=3312 makespan=2158.9s (0.60h) self_min_IoU=0.996 gen=12.8s
+09 ref_exit=0 ours_exit=0 | 09: layers=6 rows=1389 makespan=2118.6s (0.59h) self_min_IoU=0.987 gen=9.4s
+10 ref_exit=1 ours_exit=0 | 10: layers=5 rows=1304 makespan=1315.2s (0.37h) self_min_IoU=0.977 gen=2.5s
+05: layers=350 rows=396610 makespan=135412.3s (37.61h) self_min_IoU=0.998 gen=142.7s
+05 exit=0
+ALL_DONE

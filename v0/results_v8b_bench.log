@@ -1,0 +1,12 @@
+v8b_bench 01 [] GEN_FAIL makespan= gen=3.4s coll= , line 76, in cost     bad = W[~reach_ok[own, np.arange(len(own))]].sum()       
+v8b_bench 02 [] PASS makespan=882.0 gen=10.7s coll=0 
+v8b_bench 03 [] PASS makespan=1286.0 gen=15.6s coll=0 
+v8b_bench 04 [] PASS makespan=1104.0 gen=11.8s coll=0 
+v8b_bench 05 [] PASS makespan=1020.0 gen=4.2s coll=0 
+v8b_bench 06 [] PASS makespan=1376.3 gen=8.7s coll=0 
+v8b_bench 07 [] PASS makespan=2577.2 gen=41.5s coll=0 
+v8b_bench 08 [] PASS makespan=1923.0 gen=20.5s coll=0 
+v8b_bench 09 [] PASS makespan=1871.3 gen=16.1s coll=0 
+v8b_bench 10 [] PASS makespan=1206.7 gen=5.0s coll=0 
+v8b_bench ¿Ï·á ¡æ C:\Users\±èÈ£¼ö\waam_icpbl\v0\results\v8b_bench.csv
+EVAL_DONE

@@ -1,0 +1,7 @@
+pf_public_pr 01 [] PASS makespan=1160.3 gen=6.2s coll=0 
+pf_public_pr 02 [] PASS makespan=1700.0 gen=12.2s coll=0 
+pf_public_pr 03 [] PASS makespan=1674.7 gen=21.5s coll=0 
+pf_public_pr 04 [] PASS makespan=30757.0 gen=130.5s coll=0 
+pf_public_pr 05 [] PASS makespan=83660.0 gen=215.8s coll=0 
+pf_public_pr 06 [] PASS makespan=5936.7 gen=12.4s coll=0 
+pf_public_pr 완료 → C:\Users\김호수\waam_icpbl\v0\results\pf_public_pr.csv

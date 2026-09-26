@@ -1,0 +1,38 @@
+pf_h505_isl 01 [중간] PASS makespan=21899.1 gen=70.1s coll=0 
+pf_h505_isl 02 [중간] PASS makespan=36229.8 gen=66.8s coll=0 
+pf_h505_isl 03 [중간] PASS makespan=4905.8 gen=17.3s coll=0 
+pf_h505_isl 04 [어려움] PASS makespan=28213.1 gen=111.7s coll=0 
+pf_h505_isl 05 [쉬움] PASS makespan=5920.4 gen=5.1s coll=0 
+pf_h505_isl 06 [쉬움] PASS makespan=14297.2 gen=12.7s coll=0 
+pf_h505_isl 07 [어려움] PASS makespan=3825.9 gen=7.8s coll=0 
+pf_h505_isl 08 [쉬움] PASS makespan=8411.0 gen=19.8s coll=0 
+pf_h505_isl 09 [쉬움] PASS makespan=13829.1 gen=49.9s coll=0 
+pf_h505_isl 10 [중간] PASS makespan=7878.3 gen=16.3s coll=0 
+pf_h505_isl 11 [중간] PASS makespan=11999.0 gen=34.2s coll=0 
+pf_h505_isl 12 [쉬움] PASS makespan=199.2 gen=2.8s coll=0 
+pf_h505_isl 13 [중간] PASS makespan=6263.1 gen=26.8s coll=0 
+pf_h505_isl 14 [어려움] PASS makespan=22182.6 gen=56.1s coll=0 
+pf_h505_isl 15 [중간] PASS makespan=3933.7 gen=12.5s coll=0 
+pf_h505_isl 완료 → C:\Users\김호수\waam_icpbl\v0\results\pf_h505_isl.csv
+pf_h404_isl 01 [어려움] PASS makespan=1110.7 gen=4.5s coll=0 
+pf_h404_isl 02 [어려움] PASS makespan=14109.5 gen=44.5s coll=0 
+pf_h404_isl 03 [쉬움] PASS makespan=3933.4 gen=12.2s coll=0 
+pf_h404_isl 04 [중간] PASS makespan=44644.8 gen=154.6s coll=0 
+pf_h404_isl 05 [중간] PASS makespan=4629.1 gen=17.6s coll=0 
+pf_h404_isl 06 [쉬움] PASS makespan=4295.6 gen=5.9s coll=0 
+pf_h404_isl 07 [쉬움] PASS makespan=3822.1 gen=9.9s coll=0 
+pf_h404_isl 08 [중간] PASS makespan=9395.6 gen=31.6s coll=0 
+pf_h404_isl 09 [중간] PASS makespan=6721.1 gen=17.2s coll=0 
+pf_h404_isl 10 [쉬움] PASS makespan=4060.3 gen=54.2s coll=0 
+pf_h404_isl 11 [중간] PASS makespan=12805.5 gen=37.0s coll=0 
+pf_h404_isl 12 [중간] PASS makespan=3540.5 gen=11.6s coll=0 
+pf_h404_isl 13 [쉬움] PASS makespan=6797.6 gen=20.2s coll=0 
+pf_h404_isl 14 [중간] PASS makespan=6380.1 gen=23.1s coll=0 
+pf_h404_isl 15 [어려움] PASS makespan=10644.4 gen=66.9s coll=0 
+pf_h404_isl 완료 → C:\Users\김호수\waam_icpbl\v0\results\pf_h404_isl.csv
+pf_public_isl 01 [] PASS makespan=1157.5 gen=6.7s coll=0 
+pf_public_isl 02 [] PASS makespan=1700.0 gen=14.9s coll=0 
+pf_public_isl 03 [] PASS makespan=1655.6 gen=11.2s coll=0 
+pf_valid_isl 01 [쉬움] PASS makespan=184.4 gen=9.7s coll=0 
+pf_bench_isl 01 [] PASS makespan=3458.2 gen=18.8s coll=0 
+EVAL_DONE

@@ -1,0 +1,29 @@
+pf_public_c 01 [] PASS makespan=1376.3 gen=4.7s coll=0 
+pf_public_c 02 [] PASS makespan=1901.8 gen=7.8s coll=0 
+pf_public_c 03 [] PASS makespan=1871.3 gen=7.5s coll=0 
+pf_public_c 04 [] PASS makespan=38574.5 gen=115.7s coll=0 
+pf_public_c 05 [] PASS makespan=129275.1 gen=173.3s coll=0 
+pf_public_c 06 [] PASS makespan=7787.4 gen=12.6s coll=0 
+pf_public_c 완료 → C:\Users\김호수\waam_icpbl\v0\results\pf_public_c.csv
+Traceback (most recent call last):
+  File "C:\Users\김호수\waam_icpbl\v0\eval_set.py", line 64, in <module>
+    w = csv.DictWriter(f, fieldnames=list(rows[0]))
+                                          ~~~~^^^
+IndexError: list index out of range
+pf_valid_c 01 [쉬움] PASS makespan=259.2 gen=2.7s coll=0 
+pf_valid_c 02 [중간] PASS makespan=7346.3 gen=13.5s coll=0 
+pf_valid_c 03 [쉬움] PASS makespan=998.4 gen=5.8s coll=0 
+pf_valid_c 04 [쉬움] PASS makespan=756.4 gen=2.7s coll=0 
+pf_valid_c 05 [어려움] PASS makespan=1674.8 gen=4.5s coll=0 
+pf_valid_c 06 [쉬움] PASS makespan=13430.3 gen=38.9s coll=0 
+pf_valid_c 07 [쉬움] PASS makespan=5329.2 gen=6.9s coll=0 
+pf_valid_c 08 [중간] PASS makespan=2315.2 gen=7.3s coll=0 
+pf_valid_c 09 [중간] PASS makespan=672.6 gen=3.8s coll=0 
+pf_valid_c 10 [쉬움] PASS makespan=14259.5 gen=15.5s coll=0 
+pf_valid_c 11 [중간] PASS makespan=3143.3 gen=10.2s coll=0 
+pf_valid_c 12 [중간] PASS makespan=22630.2 gen=41.9s coll=0 
+pf_valid_c 13 [어려움] PASS makespan=26152.6 gen=122.2s coll=0 
+pf_valid_c 14 [쉬움] PASS makespan=4829.5 gen=11.6s coll=0 
+pf_valid_c 15 [중간] PASS makespan=2523.0 gen=9.5s coll=0 
+pf_valid_c 16 [중간] PASS makespan=5546.8 gen=8.6s coll=0 
+EVAL_DONE

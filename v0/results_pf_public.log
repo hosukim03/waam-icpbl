@@ -1,0 +1,8 @@
+pf_public 01 [] PASS makespan=1376.3 gen=10.5s coll=0 
+pf_public 02 [] PASS makespan=1901.8 gen=25.5s coll=0 
+pf_public 03 [] PASS makespan=1871.3 gen=21.5s coll=0 
+pf_public 04 [] PASS makespan=38574.5 gen=255.8s coll=0 
+pf_public 05 [] PASS makespan=129275.1 gen=375.6s coll=0 
+pf_public 06 [] PASS makespan=7787.4 gen=26.2s coll=0 
+pf_public ¿Ï·á ¡æ C:\Users\±èÈ£¼ö\waam_icpbl\v0\results\pf_public.csv
+EVAL_DONE

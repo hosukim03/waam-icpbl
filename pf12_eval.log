@@ -1,0 +1,44 @@
+pf_public12 01 [] PASS makespan=1273.0 gen=7.4s coll=0 
+pf_public12 02 [] PASS makespan=1894.8 gen=11.8s coll=0 
+pf_public12 03 [] PASS makespan=1827.9 gen=11.3s coll=0 
+pf_public12 04 [] PASS makespan=36952.2 gen=223.0s coll=0 
+pf_public12 05 [] PASS makespan=123152.8 gen=310.3s coll=0 
+pf_public12 06 [] PASS makespan=6610.3 gen=18.7s coll=0 
+pf_public12 완료 → C:\Users\김호수\waam_icpbl\v0\results\pf_public12.csv
+pf_valid12 01 [쉬움] PASS makespan=226.6 gen=4.7s coll=0 
+pf_valid12 02 [중간] PASS makespan=6697.1 gen=16.4s coll=0 
+pf_valid12 03 [쉬움] PASS makespan=998.4 gen=9.8s coll=0 
+pf_valid12 04 [쉬움] PASS makespan=664.2 gen=4.7s coll=0 
+pf_valid12 05 [어려움] PASS makespan=1447.5 gen=6.0s coll=0 
+pf_valid12 06 [쉬움] PASS makespan=12631.4 gen=31.2s coll=0 
+pf_valid12 07 [쉬움] PASS makespan=5012.0 gen=9.6s coll=0 
+pf_valid12 08 [중간] PASS makespan=2296.6 gen=10.7s coll=0 
+pf_valid12 09 [중간] PASS makespan=607.2 gen=8.8s coll=0 
+pf_valid12 10 [쉬움] PASS makespan=13885.4 gen=27.3s coll=0 
+pf_valid12 11 [중간] PASS makespan=3032.6 gen=13.9s coll=0 
+pf_valid12 12 [중간] PASS makespan=20503.2 gen=62.4s coll=0 
+pf_valid12 13 [어려움] PASS makespan=25416.2 gen=175.2s coll=0 
+pf_valid12 14 [쉬움] PASS makespan=4483.7 gen=10.9s coll=0 
+pf_valid12 15 [중간] PASS makespan=2523.0 gen=9.6s coll=0 
+pf_valid12 16 [중간] PASS makespan=5485.4 gen=9.4s coll=0 
+pf_valid12 17 [어려움] PASS makespan=51473.1 gen=124.8s coll=0 
+pf_valid12 18 [쉬움] PASS makespan=3585.8 gen=18.8s coll=0 
+pf_valid12 19 [쉬움] PASS makespan=2655.1 gen=10.3s coll=0 
+pf_valid12 20 [쉬움] PASS makespan=4184.9 gen=9.2s coll=0 
+pf_valid12 완료 → C:\Users\김호수\waam_icpbl\v0\results\pf_valid12.csv
+pf_bench12 01 [] PASS makespan=3546.5 gen=20.8s coll=0 
+pf_bench12 02 [] PASS makespan=716.7 gen=12.6s coll=0 
+pf_bench12 03 [] PASS makespan=1267.2 gen=15.1s coll=0 
+pf_bench12 04 [] PASS makespan=1085.2 gen=13.0s coll=0 
+pf_bench12 05 [] PASS makespan=1003.7 gen=8.1s coll=0 
+pf_bench12 06 [] PASS makespan=1273.0 gen=11.0s coll=0 
+pf_bench12 07 [] PASS makespan=2379.7 gen=26.1s coll=0 
+pf_bench12 08 [] PASS makespan=1894.8 gen=12.9s coll=0 
+pf_bench12 09 [] PASS makespan=1827.9 gen=9.6s coll=0 
+pf_bench12 10 [] PASS makespan=1080.8 gen=5.8s coll=0 
+pf_bench12 완료 → C:\Users\김호수\waam_icpbl\v0\results\pf_bench12.csv
+EVAL_DONE
+n=23.6s coll=0 
+pf_bench12 10 [] PASS makespan=1080.8 gen=8.9s coll=0 
+pf_bench12 완료 → C:\Users\김호수\waam_icpbl\v0\results\pf_bench12.csv
+EVAL_DONE

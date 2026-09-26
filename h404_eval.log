@@ -1,0 +1,33 @@
+pf_h404 01 [어려움] PASS makespan=1110.2 gen=3.6s coll=0 
+pf_h404 02 [어려움] PASS makespan=14553.4 gen=32.5s coll=0 
+pf_h404 03 [쉬움] PASS makespan=3851.5 gen=11.4s coll=0 
+pf_h404 04 [중간] PASS makespan=45295.7 gen=153.7s coll=0 
+pf_h404 05 [중간] PASS makespan=4632.7 gen=17.9s coll=0 
+pf_h404 06 [쉬움] FAIL makespan=4152.6 gen=4.4s coll=0 Overall IoU 86.16% is below minimum 90.00%.
+pf_h404 07 [쉬움] PASS makespan=3822.1 gen=8.2s coll=0 
+pf_h404 08 [중간] PASS makespan=9449.7 gen=29.3s coll=0 
+pf_h404 09 [중간] PASS makespan=6736.9 gen=15.4s coll=0 
+pf_h404 10 [쉬움] PASS makespan=3942.9 gen=48.7s coll=0 
+pf_h404 11 [중간] PASS makespan=12797.8 gen=34.5s coll=0 
+pf_h404 12 [중간] PASS makespan=3601.8 gen=11.9s coll=0 
+pf_h404 13 [쉬움] PASS makespan=6798.3 gen=19.6s coll=0 
+pf_h404 14 [중간] PASS makespan=6354.8 gen=20.8s coll=0 
+pf_h404 15 [어려움] PASS makespan=10521.6 gen=61.9s coll=0 
+pf_h404 완료 → C:\Users\김호수\waam_icpbl\v0\results\pf_h404.csv
+v7_h404 01 [어려움] PASS makespan=1732.0 gen=7.7s coll=0 
+v7_h404 02 [어려움] PASS makespan=24300.6 gen=166.7s coll=0 
+v7_h404 03 [쉬움] PASS makespan=6037.6 gen=33.1s coll=0 
+v7_h404 04 [중간] PASS makespan=47661.2 gen=182.9s coll=0 
+v7_h404 05 [중간] PASS makespan=5183.6 gen=41.2s coll=0 
+v7_h404 06 [쉬움] PASS makespan=5907.8 gen=4.7s coll=0 
+v7_h404 07 [쉬움] PASS makespan=5687.3 gen=42.6s coll=0 
+v7_h404 08 [중간] PASS makespan=10774.0 gen=69.7s coll=0 
+v7_h404 09 [중간] PASS makespan=8148.2 gen=80.7s coll=0 
+v7_h404 10 [쉬움] PASS makespan=4713.8 gen=346.6s coll=0 
+v7_h404 11 [중간] PASS makespan=13243.2 gen=112.0s coll=0 
+v7_h404 12 [중간] PASS makespan=4226.0 gen=17.7s coll=0 
+v7_h404 13 [쉬움] PASS makespan=7791.7 gen=25.3s coll=0 
+v7_h404 14 [중간] PASS makespan=8028.6 gen=106.4s coll=0 
+v7_h404 15 [어려움] PASS makespan=13177.6 gen=76.0s coll=0 
+v7_h404 완료 → C:\Users\김호수\waam_icpbl\v0\results\v7_h404.csv
+EVAL_DONE

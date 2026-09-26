@@ -1,0 +1,21 @@
+v8_valid 01 [쉬움] PASS makespan=2209.5 gen=10.8s coll=0 
+v8_valid 02 [중간] FAIL makespan=2078.3 gen=5.7s coll=0 Overall IoU 75.90% is below minimum 90.00%.; Failed-layer ratio 85.71% exceeds m
+v8_valid 03 [쉬움] PASS makespan=2722.2 gen=11.8s coll=0 
+v8_valid 04 [쉬움] PASS makespan=7450.6 gen=7.8s coll=0 
+v8_valid 05 [어려움] PASS makespan=3537.4 gen=4.5s coll=0 
+v8_valid 06 [쉬움] PASS makespan=9645.3 gen=4.5s coll=0 
+v8_valid 07 [쉬움] PASS makespan=2269.5 gen=4.0s coll=0 
+v8_valid 08 [중간] PASS makespan=7277.3 gen=56.5s coll=0 
+v8_valid 09 [중간] PASS makespan=17020.1 gen=109.8s coll=0 
+v8_valid 10 [쉬움] PASS makespan=9104.0 gen=4.4s coll=0 
+v8_valid 11 [중간] PASS makespan=10456.4 gen=15.3s coll=0 
+v8_valid 12 [중간] PASS makespan=18597.8 gen=30.3s coll=0 
+v8_valid 13 [어려움] PASS makespan=18739.9 gen=43.5s coll=0 
+v8_valid 14 [쉬움] PASS makespan=15783.2 gen=4.0s coll=0 
+v8_valid 15 [중간] PASS makespan=58165.2 gen=135.4s coll=0 
+v8_valid 16 [중간] PASS makespan=17181.8 gen=41.8s coll=0 
+v8_valid 17 [어려움] PASS makespan=28230.7 gen=184.3s coll=0 
+v8_valid 18 [쉬움] PASS makespan=500.9 gen=4.2s coll=0 
+v8_valid 19 [쉬움] PASS makespan=1476.6 gen=10.3s coll=0 
+v8_valid 20 [쉬움] PASS makespan=7999.3 gen=8.0s coll=0 
+v8_valid 완료 → C:\Users\김호수\waam_icpbl\v0\results\v8_valid.csv

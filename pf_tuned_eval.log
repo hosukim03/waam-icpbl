@@ -1,0 +1,29 @@
+pf_valid_t 01 [쉬움] PASS makespan=254.5 gen=2.8s coll=0 
+pf_valid_t 02 [중간] PASS makespan=7354.7 gen=9.9s coll=0 
+pf_valid_t 03 [쉬움] PASS makespan=998.4 gen=6.6s coll=0 
+pf_valid_t 04 [쉬움] PASS makespan=755.0 gen=3.0s coll=0 
+pf_valid_t 05 [어려움] PASS makespan=1640.3 gen=4.4s coll=0 
+pf_valid_t 06 [쉬움] PASS makespan=13421.7 gen=23.9s coll=0 
+pf_valid_t 07 [쉬움] PASS makespan=5326.2 gen=6.3s coll=0 
+pf_valid_t 08 [중간] PASS makespan=2333.5 gen=6.2s coll=0 
+pf_valid_t 09 [중간] PASS makespan=665.1 gen=3.9s coll=0 
+pf_valid_t 10 [쉬움] PASS makespan=14959.6 gen=16.8s coll=0 
+pf_valid_t 11 [중간] PASS makespan=3131.0 gen=8.2s coll=0 
+pf_valid_t 12 [중간] PASS makespan=21002.1 gen=32.9s coll=0 
+pf_valid_t 13 [어려움] PASS makespan=27659.3 gen=118.9s coll=0 
+pf_valid_t 14 [쉬움] PASS makespan=4845.2 gen=10.6s coll=0 
+pf_valid_t 15 [중간] PASS makespan=2523.0 gen=8.9s coll=0 
+pf_valid_t 16 [중간] PASS makespan=5546.1 gen=7.2s coll=0 
+pf_valid_t 17 [어려움] PASS makespan=59755.9 gen=116.7s coll=0 
+pf_valid_t 18 [쉬움] PASS makespan=3585.8 gen=18.8s coll=0 
+pf_valid_t 19 [쉬움] PASS makespan=3006.2 gen=11.3s coll=0 
+pf_valid_t 20 [쉬움] PASS makespan=4184.9 gen=7.3s coll=0 
+pf_valid_t 완료 → C:\Users\김호수\waam_icpbl\v0\results\pf_valid_t.csv
+pf_public_t 01 [] PASS makespan=1365.0 gen=5.9s coll=0 
+pf_public_t 02 [] PASS makespan=1913.9 gen=9.3s coll=0 
+pf_public_t 03 [] PASS makespan=1827.9 gen=8.7s coll=0 
+pf_public_t 04 [] PASS makespan=39127.9 gen=134.6s coll=0 
+pf_public_t 05 [] PASS makespan=129793.5 gen=216.5s coll=0 
+pf_public_t 06 [] PASS makespan=7845.1 gen=11.3s coll=0 
+pf_public_t 완료 → C:\Users\김호수\waam_icpbl\v0\results\pf_public_t.csv
+EVAL_DONE

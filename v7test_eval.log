@@ -1,0 +1,17 @@
+v7_test 01 [중간] PASS makespan=10721.9 gen=21.3s coll=0 
+v7_test 02 [어려움] PASS makespan=22854.2 gen=168.1s coll=0 
+v7_test 03 [쉬움] PASS makespan=8815.9 gen=30.5s coll=0 
+v7_test 04 [중간] PASS makespan=25683.9 gen=115.1s coll=0 
+v7_test 05 [중간] PASS makespan=4061.2 gen=29.9s coll=0 
+v7_test 06 [중간] PASS makespan=31501.3 gen=126.0s coll=0 
+v7_test 07 [중간] PASS makespan=1853.8 gen=14.1s coll=0 
+v7_test 08 [중간] PASS makespan=3594.3 gen=16.2s coll=0 
+v7_test 09 [어려움] PASS makespan=2422.0 gen=8.5s coll=0 
+v7_test 10 [쉬움] PASS makespan=6896.7 gen=16.2s coll=0 
+v7_test 11 [쉬움] PASS makespan=2703.4 gen=30.3s coll=0 
+v7_test 12 [중간] PASS makespan=1007.0 gen=57.2s coll=0 
+v7_test 13 [쉬움] PASS makespan=14851.7 gen=20.5s coll=0 
+v7_test 14 [쉬움] PASS makespan=756.8 gen=1.7s coll=0 
+v7_test 15 [어려움] PASS makespan=11064.8 gen=124.8s coll=0 
+v7_test 완료 → C:\Users\김호수\waam_icpbl\v0\results\v7_test.csv
+EVAL_DONE

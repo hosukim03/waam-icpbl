@@ -1,0 +1,230 @@
+"""층 단면 -> 용접 중심선(폴리라인) 생성 + 채점기와 같은 방식으로 IoU 자체 평가."""
+from __future__ import annotations
+import numpy as np
+import shapely
+from shapely import LineString, MultiPoint, Polygon, MultiPolygon, union_all
+from shapely.geometry.base import BaseGeometry
+
+W = 8.0          # bead width
+R = W / 2.0
+QUAD = 8         # config.shape_validation.polygon_buffer_resolution
+
+
+def _polys(g: BaseGeometry) -> list[Polygon]:
+    if g.is_empty:
+        return []
+    if isinstance(g, Polygon):
+        return [g]
+    return [p for p in getattr(g, "geoms", []) if isinstance(p, Polygon) and not p.is_empty]
+
+
+def _rings(g: BaseGeometry, simplify: float) -> list[np.ndarray]:
+    out = []
+    for p in _polys(g):
+        for ring in [p.exterior, *p.interiors]:
+            r = LineString(ring.coords).simplify(simplify, preserve_topology=False)
+            c = np.asarray(r.coords)[:, :2]
+            if len(c) >= 2 and LineString(c).length > 1e-6:
+                out.append(c)
+    return out
+
+
+def concentric(A: BaseGeometry, step: float, first: float = R, simplify: float = 0.05, join: str = "round") -> list[np.ndarray]:
+    paths, d = [], first
+    while True:
+        inner = A.buffer(-d, quad_segs=QUAD, join_style=join, mitre_limit=10.0)
+        if inner.is_empty or inner.area < 1e-3:
+            break
+        paths += _rings(inner, simplify)
+        d += step
+    return paths
+
+
+def sliver(A: BaseGeometry, delta: float, simplify: float = 0.05) -> list[np.ndarray]:
+    """얇은 벽용: 폭 2*delta 인 가느다란 띠의 테두리 = 사실상 중심선 왕복."""
+    inner = A.buffer(-(R - delta), quad_segs=QUAD, join_style="round")
+    return _rings(inner, simplify)
+
+
+def medial(A: BaseGeometry, spacing: float = 1.0, min_clear: float = 3.0, simplify: float = 0.1) -> list[np.ndarray]:
+    """얇은 벽용 진짜 중심선: 경계점 Voronoi 모서리 중 벽 안쪽이고 경계에서 min_clear 이상 떨어진 것.
+    교차점을 지나며 이어 그을 수 있게 trail(한붓그리기 조각) 단위로 묶어 아크 on/off 횟수를 줄인다."""
+    if A.is_empty:
+        return []
+    pts = shapely.get_coordinates(shapely.segmentize(A.boundary, spacing))
+    if len(pts) < 4:
+        return []
+    edges = shapely.get_parts(shapely.voronoi_polygons(MultiPoint(pts), only_edges=True, extend_to=A))
+    if len(edges) == 0:
+        return []
+    shapely.prepare(A)
+    inside = shapely.contains(A, edges)
+    edges = edges[inside]
+    if len(edges) == 0:
+        return []
+    bnd = A.boundary
+    shapely.prepare(bnd)
+    ends = shapely.get_coordinates(edges).reshape(-1, 2, 2)
+    d0 = shapely.distance(shapely.points(ends[:, 0]), bnd)
+    d1 = shapely.distance(shapely.points(ends[:, 1]), bnd)
+    edges = edges[(d0 >= min_clear) & (d1 >= min_clear)]
+    if len(edges) == 0:
+        return []
+    merged = shapely.line_merge(union_all(edges))
+    lines = [np.asarray(g.coords)[:, :2] for g in shapely.get_parts(merged) if g.length > 1e-6]
+    lines = _prune_spurs(lines, max_len=R)
+    return _trails(lines, simplify)
+
+
+def _prune_spurs(lines: list[np.ndarray], max_len: float, tol: float = 1e-3) -> list[np.ndarray]:
+    """볼록 모서리 쪽으로 뻗는 짧은 잔가지(한쪽 끝이 막다른 짧은 선)를 제거하고 다시 잇는다.
+    잔가지 길이는 비드 반폭 이하라 제거해도 둥근 비드 끝이 그 부분을 덮는다."""
+    key = lambda p: (round(p[0] / tol), round(p[1] / tol))
+    for _ in range(3):
+        deg: dict = {}
+        for ln in lines:
+            for end in (0, -1):
+                deg[key(ln[end])] = deg.get(key(ln[end]), 0) + 1
+        keep = []
+        removed = False
+        for ln in lines:
+            a, b = deg[key(ln[0])], deg[key(ln[-1])]
+            L = float(np.sum(np.hypot(*np.diff(ln, axis=0).T)))
+            if L < max_len and ((a == 1 and b >= 3) or (b == 1 and a >= 3)):
+                removed = True
+                continue
+            keep.append(ln)
+        lines = keep
+        if not removed:
+            break
+        merged = shapely.line_merge(shapely.MultiLineString([LineString(l) for l in lines]))
+        lines = [np.asarray(g.coords)[:, :2] for g in shapely.get_parts(merged) if g.length > 1e-6]
+    return lines
+
+
+def _trails(lines: list[np.ndarray], simplify: float, tol: float = 1e-3) -> list[np.ndarray]:
+    """끝점이 만나는 폴리라인들을 탐욕적으로 이어 붙여 조각 수를 줄인다(홀수 차수 노드에서 시작)."""
+    key = lambda p: (round(p[0] / tol), round(p[1] / tol))
+    adj: dict = {}
+    for i, ln in enumerate(lines):
+        for end in (0, -1):
+            adj.setdefault(key(ln[end]), []).append(i)
+    used = [False] * len(lines)
+
+    def walk(start_node):
+        chain, node, prev_dir = [], start_node, None
+        while True:
+            cands = [i for i in adj.get(node, []) if not used[i]]
+            if not cands:
+                break
+            best, best_cos, best_seq = None, -2.0, None
+            for i in cands:
+                ln = lines[i]
+                seq = ln if key(ln[0]) == node else ln[::-1]
+                v = seq[min(1, len(seq) - 1)] - seq[0]
+                nv = np.linalg.norm(v)
+                c = 1.0 if prev_dir is None or nv == 0 else float(np.dot(prev_dir, v / nv))
+                if c > best_cos:
+                    best, best_cos, best_seq = i, c, seq
+            used[best] = True
+            chain.append(best_seq if not chain else best_seq[1:])
+            tail = best_seq[-1] - best_seq[-2] if len(best_seq) > 1 else None
+            prev_dir = None if tail is None or np.linalg.norm(tail) == 0 else tail / np.linalg.norm(tail)
+            node = key(best_seq[-1])
+        return np.vstack(chain) if chain else None
+
+    out = []
+    odd = [n for n, v in adj.items() if len(v) % 2 == 1]
+    for n in odd + list(adj.keys()):
+        while any(not used[i] for i in adj[n]):
+            c = walk(n)
+            if c is None:
+                break
+            c = np.asarray(LineString(c).simplify(simplify, preserve_topology=False).coords)[:, :2]
+            if len(c) >= 2:
+                out.append(c)
+    return out
+
+
+def est_time(sc: dict, v_dep: float = 8.0, arc: float = 2.0) -> float:
+    return sc["length"] / v_dep + arc * sc["pieces"]
+
+
+def deposit(paths: list[np.ndarray]) -> BaseGeometry:
+    if not paths:
+        return Polygon()
+    return union_all([LineString(p).buffer(R, quad_segs=QUAD, cap_style="round", join_style="round") for p in paths])
+
+
+def score(A: BaseGeometry, paths: list[np.ndarray]) -> dict:
+    Dp = deposit(paths)
+    inter = A.intersection(Dp).area
+    union = A.union(Dp).area
+    return {"iou": inter / union if union else 0.0,
+            "coverage": inter / A.area if A.area else 0.0,
+            "overfill": (Dp.area - inter) / A.area if A.area else 0.0,
+            "length": float(sum(LineString(p).length for p in paths)),
+            "pieces": len(paths),
+            "vertices": int(sum(len(p) for p in paths))}
+
+
+IOU_TARGET = 0.92      # 층별 기준 0.80 / 전체 0.90 보다 여유 있게
+OVERFILL_MAX = 0.25    # 기준 0.30 보다 여유 있게
+
+
+def best_paths(A: BaseGeometry, legacy: bool = False) -> tuple[list[np.ndarray], dict, str]:
+    """후보 경로들 중 형상 기준(여유 포함)을 만족하는 것 가운데 예상 적층시간이 가장 짧은 것.
+    만족하는 후보가 없으면 IoU 가 가장 높은 것."""
+    cands = []
+    if not legacy:
+        inner = A.buffer(-R, quad_segs=QUAD)
+        if inner.area < 0.5 * A.area:                 # 얇은 벽이 대부분인 층
+            cands.append(("medial", medial(A)))
+        else:                                         # 두꺼운 영역 + 남은 얇은 틈은 중심선으로 보강
+            base = concentric(A, 7.5, join="mitre")
+            gap = A.difference(deposit(base)).buffer(-0.5).buffer(0.5)
+            if gap.area > 4.0:
+                cands.append(("mitre7.5+medial", base + medial(gap.buffer(R * 0.5).intersection(A))))
+    for s in (7.0, 7.5, 8.0):
+        cands.append((f"concentric{s}", concentric(A, s)))
+        cands.append((f"mitre{s}", concentric(A, s, join="mitre")))
+    for dl in (0.15, 0.3, 0.5):
+        cands.append((f"sliver{dl}", sliver(A, dl)))
+    # 두꺼운 영역은 동심원, 거기서 남은 얇은 틈은 sliver 로 보강
+    base = concentric(A, 7.5)
+    gap = A.difference(deposit(base)).buffer(0)
+    if gap.area > 1.0:
+        extra = [p for p in sliver(A, 0.3) if LineString(p).buffer(R).intersection(gap).area > 0.5 * LineString(p).length]
+        cands.append(("concentric7.5+sliver", base + extra))
+    # 모서리 보강: 남은 빈틈의 각 조각 중심선을 짧게 추가
+    for name0, P0 in list(cands):
+        if not name0.startswith("mitre"):
+            continue
+        gap = A.difference(deposit(P0)).buffer(-0.5).buffer(0.5)
+        extra = []
+        for g in _polys(gap):
+            if g.area < 4.0:
+                continue
+            c = np.asarray(g.centroid.coords)[0]
+            mrr = g.minimum_rotated_rectangle
+            xy = np.asarray(mrr.exterior.coords)[:4]
+            e1, e2 = xy[1] - xy[0], xy[2] - xy[1]
+            ax = e1 if np.linalg.norm(e1) >= np.linalg.norm(e2) else e2
+            L = max(np.linalg.norm(ax) - W, 0.6)
+            u = ax / (np.linalg.norm(ax) + 1e-12)
+            extra.append(np.array([c - u * L / 2, c + u * L / 2]))
+        if extra:
+            cands.append((name0 + "+fill", P0 + extra))
+    best = None
+    for name, P in cands:
+        if not P:
+            continue
+        sc = score(A, P)
+        if legacy:
+            key = (sc["overfill"] <= 0.30, round(sc["iou"], 3), -sc["length"])
+        else:
+            ok = sc["iou"] >= IOU_TARGET and sc["overfill"] <= OVERFILL_MAX
+            key = (ok, -est_time(sc) if ok else sc["iou"])
+        if best is None or key > best[0]:
+            best = (key, P, sc, name)
+    return best[1], best[2], best[3]

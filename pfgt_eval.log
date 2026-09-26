@@ -1,0 +1,8 @@
+pf_public_gt 01 [] PASS makespan=1160.3 gen=11.8s coll=0 
+pf_public_gt 02 [] PASS makespan=1700.0 gen=25.8s coll=0 
+pf_public_gt 03 [] PASS makespan=1674.7 gen=18.1s coll=0 
+pf_public_gt 04 [] PASS makespan=30757.0 gen=158.5s coll=0 
+pf_public_gt 05 [] PASS makespan=83660.0 gen=236.4s coll=0 
+pf_public_gt 06 [] PASS makespan=5936.7 gen=13.0s coll=0 
+pf_public_gt 완료 → C:\Users\김호수\waam_icpbl\v0\results\pf_public_gt.csv
+EVAL_DONE
