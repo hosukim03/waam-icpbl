@@ -1,0 +1,11 @@
+﻿job,level,desc,status,makespan_s,gen_s,iou,collisions,reasons
+01,,,GEN_FAIL,,3.4,,,", line 76, in cost     bad = W[~reach_ok[own, np.arange(len(own))]].sum()              ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^ IndexError: index 4653595477658528885 is out of bounds for axis 0 with size 3 "
+02,,,PASS,882.0,10.7,0.994,0,
+03,,,PASS,1286.0,15.6,0.993,0,
+04,,,PASS,1104.0,11.8,0.991,0,
+05,,,PASS,1020.0,4.2,1.000,0,
+06,,,PASS,1376.3,8.7,0.997,0,
+07,,,PASS,2577.2,41.5,0.993,0,
+08,,,PASS,1923.0,20.5,0.997,0,
+09,,,PASS,1871.3,16.1,0.987,0,
+10,,,PASS,1206.7,5.0,0.977,0,

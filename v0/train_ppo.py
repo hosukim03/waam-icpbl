@@ -28,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from ppo_policy import Policy, logp_and_grad  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "train_div"
+SRC = ROOT / "data" / "train_div"
 WORK = ROOT / "tune_work"
 OUT = WORK / "ppo"
 JOBS_PER_IT, SAMPLES, EPOCHS, CLIP, LR = 8, 4, 4, 0.2, 0.01

@@ -2,8 +2,8 @@
 """형상 묶음 하나를 특정 스케줄러로 전부 돌리고 채점해 표(CSV)로 남긴다.
 
 usage: python eval_set.py <스케줄러.py> <형상폴더> <결과이름>
-  예) python eval_set.py schedule_v8.py ../valid_div v8_valid
-결과: v0/results/<결과이름>.csv  (job, 난이도, 설명, 판정, makespan_s, 생성시간_s, IoU, 충돌수, 실패사유)
+  예) python eval_set.py schedule_v8.py ../data/valid_div v8_valid
+결과: results/<결과이름>.csv  (job, 난이도, 설명, 판정, makespan_s, 생성시간_s, IoU, 충돌수, 실패사유)
 기본 파이썬으로 실행 (스케줄러·채점기는 WAAM venv 파이썬으로 호출)
 """
 import csv
@@ -18,7 +18,7 @@ VPY = ROOT / "WAAM_Validator" / ".venv" / "Scripts" / "python.exe"
 sched, src, name = sys.argv[1], Path(sys.argv[2]).resolve(), sys.argv[3]
 jobs_dir = ROOT / "jobs_eval" / name
 runs_dir = ROOT / "runs_eval" / name
-out_csv = ROOT / "v0" / "results" / f"{name}.csv"
+out_csv = ROOT / "results" / f"{name}.csv"
 out_csv.parent.mkdir(parents=True, exist_ok=True)
 env = {"PYTHONIOENCODING": "utf-8", **__import__("os").environ}
 

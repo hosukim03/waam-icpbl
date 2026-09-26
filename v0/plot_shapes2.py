@@ -11,7 +11,7 @@ from waam_validator.config.loader import load_config
 from waam_validator.shape.target import load_target_mesh, slice_target_layers
 
 out = {}
-for d in sorted(Path("../train_jobs2").iterdir()):
+for d in sorted(Path("../data/train_jobs2").iterdir()):
     if not (d / "target.stl").exists():
         continue
     cfg = load_config(d / "config.yaml")

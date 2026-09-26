@@ -40,7 +40,7 @@ def analyze(path):
 
 if __name__ == "__main__":
     print(f"{'job':6s} {'makespan':>9s} {'하한':>8s} {'효율':>6s} {'로봇가동률(D)':>12s} {'D':>8s} {'T':>7s} {'W':>8s}")
-    for group, base in (("public", ROOT / "jobs_v3"), ("bench", ROOT / "bench" / "jobs_v3")):
+    for group, base in (("public", ROOT / "jobs_v3"), ("bench", ROOT / "data" / "bench" / "jobs_v3")):
         for d in sorted(base.iterdir()):
             p = d / "trajectory.csv"
             if not p.exists():

@@ -11,7 +11,7 @@ from waam_validator.shape.target import load_target_mesh, slice_target_layers
 
 sys.stdout.reconfigure(encoding="utf-8")
 print(f"{'형상':12s} {'층수':>4s} {'면적 최소~최대(cm2)':>22s} {'변화폭':>7s} {'조각수':>8s}")
-for base, tag in [(Path("tests"), "public"), (Path("../bench/tests"), "bench"), (Path("../train_jobs"), "train")]:
+for base, tag in [(Path("tests"), "public"), (Path("../data/bench/tests"), "bench"), (Path("../data/train_jobs"), "train")]:
     for d in sorted(base.iterdir()):
         if not (d / "target.stl").exists():
             continue

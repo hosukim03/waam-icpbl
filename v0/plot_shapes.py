@@ -11,7 +11,7 @@ from waam_validator.config.loader import load_config
 from waam_validator.shape.target import load_target_mesh, slice_target_layers
 
 out = {}
-for label, base in [("bench", Path("../bench/tests")), ("train", Path("../train_jobs"))]:
+for label, base in [("bench", Path("../data/bench/tests")), ("train", Path("../data/train_jobs"))]:
     for d in sorted(base.iterdir()):
         if not (d / "target.stl").exists():
             continue

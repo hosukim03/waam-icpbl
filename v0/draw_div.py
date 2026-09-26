@@ -14,7 +14,7 @@ plt.rcParams["axes.unicode_minus"] = False
 NAMES = {'line': '막대', 'ring': '원형 벽', 'rect': '사각 벽', 'block': '속찬 블록', 'wave': '물결선', 'hexgrid': '벌집 격자', 'sqgrid': '사각 격자', 'trigrid': '삼각 격자', 'spiral': '나선', 'truss': '트러스', 'islands': '떨어진 섬', 'star': '별', 'plate': '판+기둥', 'vase': '꽃병', 'bracket': '브래킷'}
 R = Path(__file__).resolve().parents[1]
 L = np.array([0.4, -0.6, 0.8]) / np.linalg.norm([0.4, -0.6, 0.8])
-dirs = sorted(p for p in (R / "train_div").iterdir() if (p / "target.stl").exists())
+dirs = sorted(p for p in (R / "data" / "train_div").iterdir() if (p / "target.stl").exists())
 fig = plt.figure(figsize=(22, 19), dpi=110)
 for n, d in enumerate(dirs):
     m = trimesh.load(d / "target.stl")

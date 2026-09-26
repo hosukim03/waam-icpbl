@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 VPY = ROOT / "WAAM_Validator/.venv/Scripts/python.exe"
-SRC = ROOT / "train_div"; WORK = ROOT / "tune_work"
+SRC = ROOT / "data" / "train_div"; WORK = ROOT / "tune_work"
 CH = [40, 60, 80, 120, 160, 220, 320]
 
 def run(a):

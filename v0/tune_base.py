@@ -4,7 +4,7 @@ import json, multiprocessing as mp, re, subprocess, sys, time
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 VPY = ROOT / "WAAM_Validator/.venv/Scripts/python.exe"
-SRC = ROOT / "train_div"
+SRC = ROOT / "data" / "train_div"
 WORK = ROOT / "tune_work"
 
 def sched(args):

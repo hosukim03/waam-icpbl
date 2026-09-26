@@ -13,7 +13,7 @@ plt.rcParams["font.family"] = "Malgun Gothic"
 plt.rcParams["axes.unicode_minus"] = False
 R = Path(__file__).resolve().parents[1]
 L = np.array([0.4, -0.6, 0.8]) / np.linalg.norm([0.4, -0.6, 0.8])
-dirs = sorted(p for p in (R / "train_jobs3").iterdir() if (p / "target.stl").exists())
+dirs = sorted(p for p in (R / "data" / "train_jobs3").iterdir() if (p / "target.stl").exists())
 fig = plt.figure(figsize=(20, 12.5), dpi=110)
 for n, d in enumerate(dirs):
     m = trimesh.load(d / "target.stl")

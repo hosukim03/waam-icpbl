@@ -9,23 +9,17 @@ WAAM_Validator/
 __pycache__/
 *.pyc
 
-# 시나리오 데이터 (make_jobs_diverse.py 로 재생성)
-jobs/
-jobs_*/
-bench/
-train_*/
-valid_*/
-test_div/
-holdout404/
-holdout505/
+# 시나리오 데이터 (v0/make_jobs_diverse.py 등으로 재생성) — 폴더만 두고 내용은 추적하지 않는다
+data/*
+!data/README.md
 cache*/
 tune_work/
 
-# 실행 산출물
+# 실행 산출물 (평가 중간 폴더)
+jobs_*/
 runs/
 runs_*/
 _movecheck/
-v0/results/
 *.out
 *.png
 

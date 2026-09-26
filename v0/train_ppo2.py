@@ -30,7 +30,7 @@ from ppo_policy import Policy, logp_and_grad  # noqa: E402
 from train_ppo import Adam  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "train_div"
+SRC = ROOT / "data" / "train_div"
 CACHE = ROOT / "tune_work" / "cache2"
 OUT = ROOT / "tune_work" / "ppo2"
 SETTINGS = {                       # portfolio 의 r2c160m5 / r3c160m5 와 같은 인자

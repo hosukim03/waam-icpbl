@@ -24,7 +24,7 @@ if __name__ == "__main__":
             subprocess.run([str(VPY), str(ROOT / "v0/toolpath_cache.py"), str(SRC / j), str(c)], cwd=ROOT / "WAAM_Validator", capture_output=True)
     with mp.Pool(mp.cpu_count()) as pool:
         res = pool.map(run, [(j, b) for j in jobs for b in (False, True)], chunksize=1)
-    ref = {r["job"]: float(r["makespan_s"]) for r in csv.DictReader(open(ROOT / "v0/results" / f"{REF}.csv", encoding="utf-8-sig"))}
+    ref = {r["job"]: float(r["makespan_s"]) for r in csv.DictReader(open(ROOT / "results" / f"{REF}.csv", encoding="utf-8-sig"))}
     new = {}
     for j, b, mk in res:
         if mk: new[j] = min(new.get(j, 1e18), mk)
