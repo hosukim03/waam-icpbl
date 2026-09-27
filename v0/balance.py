@@ -18,7 +18,7 @@ import math
 
 import numpy as np
 
-REACH = 1500.0
+REACH = 1500.0          # 스케줄러가 config 의 xy_reach_radius_mm 로 덮어쓴다
 REACH_MARGIN = 10.0
 
 
@@ -27,7 +27,8 @@ def _wrap(a):
 
 
 class SectorLabeler:
-    def __init__(self, paths, bases, reach=REACH - REACH_MARGIN, steps=48, passes=3):
+    def __init__(self, paths, bases, reach=None, steps=48, passes=3):
+        reach = REACH - REACH_MARGIN if reach is None else reach   # REACH 는 스케줄러가 config 로 맞춘다
         self.bases = [np.asarray(b[:2], float) for b in bases]
         pts, wts = [], []
         for P in paths:
@@ -130,7 +131,8 @@ class IslandLabeler:
     # gap: 경로를 이만큼 부풀려 붙는 것끼리 한 섬으로 본다. 6mm 로는 한 벽 안의 떨어진 경로 조각까지
     # 섬으로 잘못 봐서 물결 벽(404-10)이 +13.6% 나빠졌다. 진짜 섬(기둥·떨어진 조각)은 수십 mm 이상
     # 떨어져 있으므로 12mm(=24mm 이내면 같은 섬)로 둔다.
-    def __init__(self, paths, bases, reach=REACH - REACH_MARGIN, gap=12.0):
+    def __init__(self, paths, bases, reach=None, gap=12.0):
+        reach = REACH - REACH_MARGIN if reach is None else reach
         from shapely import LineString, unary_union, STRtree
         self.bases = [np.asarray(b[:2], float) for b in bases]
         self.valid = False

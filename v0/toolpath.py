@@ -6,9 +6,30 @@ from shapely import LineString, MultiPoint, Polygon, MultiPolygon, union_all
 from shapely.geometry.base import BaseGeometry
 
 MEDIAL_SPACING = 1.0   # 중심선용 경계 표본 간격
+# 아래 값은 configure(cfg) 가 config 로 덮어쓴다(공개 모델 값이 기본값).
 W = 8.0          # bead width
 R = W / 2.0
 QUAD = 8         # config.shape_validation.polygon_buffer_resolution
+V_DEP = 8.0      # 적층 속도(예상 시간 계산용)
+ARC = 2.0        # 조각당 아크 켜기+끄기 시간(예상 시간 계산용)
+# 동심원 고리 간격 = 비드 폭 × 비율(비드 폭 8mm 에서 7.0·7.5·8.0mm)
+STEP_RATIOS = (0.875, 0.9375, 1.0)
+MAIN_RATIO = 0.9375
+
+
+def configure(cfg) -> None:
+    """config 의 비드 폭·버퍼 해상도·적층 속도·아크 시간으로 경로 생성 상수를 맞춘다."""
+    global W, R, QUAD, V_DEP, ARC
+    pr = cfg.process
+    W = float(pr.bead_width_mm)
+    R = W / 2.0
+    QUAD = int(cfg.shape_validation.polygon_buffer_resolution)
+    V_DEP = float(pr.deposition_speed_mm_s)
+    ARC = float((pr.arc_on_time_s or 0.0) + (pr.arc_off_time_s or 0.0))
+
+
+def main_step() -> float:
+    return W * MAIN_RATIO
 
 
 def _polys(g: BaseGeometry) -> list[Polygon]:
@@ -30,8 +51,8 @@ def _rings(g: BaseGeometry, simplify: float) -> list[np.ndarray]:
     return out
 
 
-def concentric(A: BaseGeometry, step: float, first: float = R, simplify: float = 0.05, join: str = "round") -> list[np.ndarray]:
-    paths, d = [], first
+def concentric(A: BaseGeometry, step: float, first: float | None = None, simplify: float = 0.05, join: str = "round") -> list[np.ndarray]:
+    paths, d = [], (R if first is None else first)
     while True:
         inner = A.buffer(-d, quad_segs=QUAD, join_style=join, mitre_limit=10.0)
         if inner.is_empty or inner.area < 1e-3:
@@ -147,7 +168,9 @@ def _trails(lines: list[np.ndarray], simplify: float, tol: float = 1e-3) -> list
     return out
 
 
-def est_time(sc: dict, v_dep: float = 8.0, arc: float = 2.0) -> float:
+def est_time(sc: dict, v_dep: float | None = None, arc: float | None = None) -> float:
+    v_dep = V_DEP if v_dep is None else v_dep
+    arc = ARC if arc is None else arc
     return sc["length"] / v_dep + arc * sc["pieces"]
 
 
@@ -183,23 +206,24 @@ def best_paths(A: BaseGeometry, legacy: bool = False, spiral: bool = True, both:
     """후보 경로들 중 형상 기준(여유 포함)을 만족하는 것 가운데 예상 적층시간이 가장 짧은 것.
     만족하는 후보가 없으면 IoU 가 가장 높은 것."""
     cands = []
+    s_main = main_step()
     if not legacy:
         inner = A.buffer(-R, quad_segs=QUAD)
         if inner.area < 0.5 * A.area:                 # 얇은 벽이 대부분인 층
             cands.append(("medial", medial(A)))
         else:                                         # 두꺼운 영역 + 남은 얇은 틈은 중심선으로 보강
-            base = concentric(A, 7.5, join="mitre")
+            base = concentric(A, s_main, join="mitre")
             gap = A.difference(deposit(base)).buffer(-0.5).buffer(0.5)
             if gap.area > 4.0:
-                cands.append(("mitre7.5+medial", base + medial(gap.buffer(R * 0.5).intersection(A), spacing=GAP_SPACING)))
-    for s in (7.0, 7.5, 8.0):
+                cands.append((f"mitre{s_main}+medial", base + medial(gap.buffer(R * 0.5).intersection(A), spacing=GAP_SPACING)))
+    for s in tuple(W * r for r in STEP_RATIOS):
         rings = {jn: concentric(A, s, join=jn) for jn in ("round", "mitre")}
         cands.append((f"concentric{s}", rings["round"]))
         cands.append((f"mitre{s}", rings["mitre"]))
         # 고리를 이어 붙인 나선: 조각 수가 줄어 아크 재점화(조각당 2초)가 준다.
         # 다만 조각이 길어 로봇끼리 나눠 갖기 어려워지는 형상도 있어(04 +8.9%) 켜고 끌 수 있게 둔다.
         # 간격 7.0 은 표본에서 한 번도 뽑히지 않아 나선 후보에서 뺐다(경로 계산 시간 절약).
-        for jn in (("round", "mitre") if spiral and s >= 7.5 else ()):
+        for jn in (("round", "mitre") if spiral and s >= s_main else ()):
             P = link_rings(rings[jn], s)
             cands.append((f"linked{s}{jn}", P))
             gap = A.difference(deposit(P)).buffer(-0.5).buffer(0.5)
@@ -208,11 +232,11 @@ def best_paths(A: BaseGeometry, legacy: bool = False, spiral: bool = True, both:
     for dl in (0.15, 0.3, 0.5):
         cands.append((f"sliver{dl}", sliver(A, dl)))
     # 두꺼운 영역은 동심원, 거기서 남은 얇은 틈은 sliver 로 보강
-    base = concentric(A, 7.5)
+    base = concentric(A, s_main)
     gap = A.difference(deposit(base)).buffer(0)
     if gap.area > 1.0:
         extra = [p for p in sliver(A, 0.3) if LineString(p).buffer(R).intersection(gap).area > 0.5 * LineString(p).length]
-        cands.append(("concentric7.5+sliver", base + extra))
+        cands.append((f"concentric{s_main}+sliver", base + extra))
     # 모서리 보강: 남은 빈틈의 각 조각 중심선을 짧게 추가
     for name0, P0 in list(cands):
         if not name0.startswith("mitre"):
@@ -253,17 +277,19 @@ def best_paths(A: BaseGeometry, legacy: bool = False, spiral: bool = True, both:
     return best[1], best[2], best[3]
 
 
-def linked(A: BaseGeometry, step: float = 7.5, join: str = "mitre", simplify: float = 0.05) -> list[np.ndarray]:
+def linked(A: BaseGeometry, step: float | None = None, join: str = "mitre", simplify: float = 0.05) -> list[np.ndarray]:
     """동심원 고리들을 이어 붙여 '나선'처럼 한 붓으로 만든다.
 
     고리마다 아크를 껐다 켜면 한 번에 2초가 든다(05번 기준 makespan 의 6.3%). 고리 간격(7.5mm)이
     비드 폭(8mm)보다 좁으므로, 이웃 고리의 가장 가까운 점끼리 이어도 그 구간은 이미 덮이는 자리다.
     """
+    step = main_step() if step is None else step
     return link_rings(concentric(A, step, join=join, simplify=simplify), step)
 
 
-def link_rings(rings: list[np.ndarray], step: float = 7.5) -> list[np.ndarray]:
+def link_rings(rings: list[np.ndarray], step: float | None = None) -> list[np.ndarray]:
     """이미 만들어 둔 동심원 고리들을 가까운 것끼리 이어 붙인다(고리 재계산을 피하려고 분리)."""
+    step = main_step() if step is None else step
     if len(rings) < 2:
         return rings
     rings = [r[:-1] if len(r) > 2 and np.allclose(r[0], r[-1]) else r for r in rings]   # 닫힌 고리는 중복점 제거

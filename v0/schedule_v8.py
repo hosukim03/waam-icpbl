@@ -33,14 +33,17 @@ import schedule_v1 as v1
 from schedule_v2 import chunkify
 from toolpath import best_paths, score as _tp_score, IOU_TARGET as _IOU_T, OVERFILL_MAX as _OVER_M
 from balance import SectorLabeler, IslandLabeler
+import balance
+import toolpath
 
 DT = 0.1            # 검사 간격(s) — 채점기 max_time_step_s 와 같음
 MARGIN = 20.0       # 샘플 사이 이동(최대 150mm/s × 0.1s × 2대 / 2)을 덮는 안전 여유(mm)
 MAX_TRIES = 25      # 시작 시각 후보를 몇 개까지 시험할지
-RETRACT_R = 500.0
-REACH_OK = 1490.0
+RETRACT_R = 500.0   # 비켜 설 때 먼저 팔을 이 길이(베이스로부터)까지 당긴다
+REACH_MARGIN = 10.0
+REACH_OK = 1490.0   # 팔 길이 1500mm 에서 여유 10mm (run 에서 config 의 xy_reach_radius_mm 로 다시 맞춘다)
 PRUNE_MIN_FRAC = 0.2   # 예상 완료 시각으로 가지치기할 때 최소 진행률
-PRUNE_MARGIN = 1.15    # 예상 makespan 이 최선의 이 배수를 넘어야 멈춘다   # 팔 길이 1500mm 에서 여유 10mm   # 비켜 설 때 먼저 팔을 이 길이(베이스로부터)까지 당긴다
+PRUNE_MARGIN = 1.15    # 예상 makespan 이 최선의 이 배수를 넘어야 멈춘다
 
 
 # ---------------------------------------------------------------- 기하
@@ -596,14 +599,27 @@ class Pruned(Exception):
     """이미 다른 설정보다 느려져 더 계산할 필요가 없다."""
 
 
+def apply_config(cfg) -> None:
+    """config 의 이동 속도·팔 도달 거리·비드 폭으로 모듈 상수를 맞춘다(공개 모델 config 면 기본값과 같다)."""
+    global TRAVEL_V, REACH_OK
+    TRAVEL_V = v1.TRAVEL_V = float(cfg.process.travel_speed_mm_s)
+    reach = min(r.xy_reach_radius_mm for r in cfg.robots)
+    REACH_OK = reach - REACH_MARGIN
+    balance.REACH = reach
+    toolpath.configure(cfg)
+
+
 def run(job: Path, opts, policy=None):
     cfg = load_config(job / "config.yaml")
+    apply_config(cfg)
     mesh = load_target_mesh(job / "target.stl", cfg)
     pr = cfg.process
     arc_on = (pr.arc_on_time_s or 0.0) if opts.arc else 0.0
     arc_off = (pr.arc_off_time_s or 0.0) if opts.arc else 0.0
     vd = pr.deposition_speed_mm_s
     required = max(r.arm_envelope_radius_mm for r in cfg.robots) * 2 + cfg.collision.arm_clearance_mm
+    # 토치 간 기준(두 tcp_radius 합)이 더 크면 그쪽을 쓴다. 토치는 팔 선분의 끝점이라 팔 거리 ≥ 기준이면 토치도 만족한다.
+    required = max(required, max(r.tcp_radius_mm for r in cfg.robots) * 2)
 
     n = int(np.ceil((mesh.bounds[1, 2] - pr.build_plane_z_mm) / pr.layer_height_mm - 1e-9))
     layers = slice_target_layers(mesh, list(range(n)), cfg)

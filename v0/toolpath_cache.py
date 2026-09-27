@@ -28,6 +28,8 @@ def _slice(job: Path):
     from waam_validator.config.loader import load_config
     from waam_validator.shape.target import load_target_mesh, slice_target_layers
     cfg = load_config(job / "config.yaml")
+    import toolpath
+    toolpath.configure(cfg)          # 워커마다 config 의 비드 폭 등으로 경로 상수를 맞춘다
     mesh = load_target_mesh(job / "target.stl", cfg)
     pr = cfg.process
     n = int(np.ceil((mesh.bounds[1, 2] - pr.build_plane_z_mm) / pr.layer_height_mm - 1e-9))
