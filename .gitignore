@@ -9,7 +9,7 @@ WAAM_Validator/
 __pycache__/
 *.pyc
 
-# 시나리오 데이터 (v0/make_jobs_diverse.py 등으로 재생성) — 폴더만 두고 내용은 추적하지 않는다
+# 시나리오 데이터 (tools/make_jobs_diverse.py 등으로 재생성) — 폴더만 두고 내용은 추적하지 않는다
 data/*
 !data/README.md
 cache*/
@@ -24,5 +24,5 @@ _movecheck/
 *.png
 
 # 크기 큰 중간 데이터
-v0/shapes*.json
-v0/shape05.json
+tools/shapes*.json
+tools/shape05.json

@@ -34,5 +34,5 @@ for n, j in enumerate(sorted(INFO)):
                  fontsize=12)
 fig.suptitle("교수님 공개 모델 6개 (target.stl)", fontsize=16)
 fig.tight_layout()
-fig.savefig(R / "v0" / "public_models.png", facecolor="white")
+fig.savefig(R / "tools" / "public_models.png", facecolor="white")
 print("saved")

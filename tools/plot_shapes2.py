@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))   # 제출용 코드(src/)를 불러 쓴다
 from waam_validator.config.loader import load_config
 from waam_validator.shape.target import load_target_mesh, slice_target_layers
 
@@ -27,5 +28,5 @@ for d in sorted(Path("../data/train_jobs2").iterdir()):
                           "holes": [np.asarray(r.coords).round(1).tolist() for r in g.interiors]}
                          for g in getattr(A, "geoms", [A]) if not A.is_empty]
     out[d.name] = {"n": n, "layers": polys}
-json.dump(out, open("../v0/shapes2.json", "w"), separators=(",", ":"))
+json.dump(out, open("../tools/shapes2.json", "w"), separators=(",", ":"))
 print("ok", len(out))

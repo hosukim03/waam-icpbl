@@ -14,11 +14,11 @@ plt.rcParams["axes.unicode_minus"] = False
 NAMES = {'line': '막대', 'ring': '원형 벽', 'rect': '사각 벽', 'block': '속찬 블록', 'wave': '물결선', 'hexgrid': '벌집 격자', 'sqgrid': '사각 격자', 'trigrid': '삼각 격자', 'spiral': '나선', 'truss': '트러스', 'islands': '떨어진 섬', 'star': '별', 'plate': '판+기둥', 'vase': '꽃병', 'bracket': '브래킷'}
 R = Path(__file__).resolve().parents[1]
 L = np.array([0.4, -0.6, 0.8]) / np.linalg.norm([0.4, -0.6, 0.8])
-dirs = sorted(p for p in (R / "data" / "train_div").iterdir() if (p / "target.stl").exists())
-fig = plt.figure(figsize=(22, 19), dpi=110)
+dirs = sorted(p for p in (R / "data" / "valid_div").iterdir() if (p / "target.stl").exists())
+fig = plt.figure(figsize=(19, 15.5), dpi=110)
 for n, d in enumerate(dirs):
     m = trimesh.load(d / "target.stl")
-    ax = fig.add_subplot(5, 6, n + 1, projection="3d")
+    ax = fig.add_subplot(4, 5, n + 1, projection="3d")
     tri = m.vertices[m.faces]
     sh = 0.3 + 0.7 * np.clip(m.face_normals @ L, 0, 1)
     desc = (d / "desc.txt").read_text(encoding="utf-8")
@@ -34,7 +34,7 @@ for n, d in enumerate(dirs):
     key = next((t.split("/")[0] for t in toks if t.split("/")[0] in NAMES), "vase")
     mode = next((t.split("/")[1] for t in toks if "/" in t and t.split("/")[0] in NAMES), "")
     ax.set_title(f"{d.name} [{lvl}] {NAMES[key]} {mode}" + chr(10) + f"{ext[0]:.0f}×{ext[1]:.0f}×{ext[2]:.0f}mm", fontsize=11)
-fig.suptitle("학습 형상 v4 (30개) — 14개 계열 (초록 쉬움 / 파랑 중간 / 주황 어려움)", fontsize=16)
+fig.suptitle("검증용 형상 (20개, 학습에 안 씀) — 14개 계열 (초록 쉬움 / 파랑 중간 / 주황 어려움)", fontsize=16)
 fig.tight_layout()
-fig.savefig(R / "v0" / "shapes_div.png", facecolor="white")
+fig.savefig(R / "tools" / "shapes_valid.png", facecolor="white")
 print("saved")

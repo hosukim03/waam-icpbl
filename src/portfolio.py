@@ -131,7 +131,7 @@ def run_variant(args):
         extra += ["--bound-file", str(bound)]
     out = Path(out_root) / name
     t0 = time.time()
-    p = subprocess.run([str(VPY), str(ROOT / "v0" / script), str(job), str(out), *extra],
+    p = subprocess.run([str(VPY), str(ROOT / "src" / script), str(job), str(out), *extra],
                        capture_output=True, text=True, encoding="utf-8", errors="replace",
                        cwd=ROOT / "WAAM_Validator")
     dt = time.time() - t0
@@ -157,7 +157,7 @@ def main():
     ap.add_argument("--no-cache", dest="cache", action="store_false",
                     help="층별 경로를 설정마다 따로 계산(예전 방식)")
     a = ap.parse_args()
-    job, out = Path(a.job), Path(a.out)
+    job, out = Path(a.job).resolve(), Path(a.out).resolve()   # 하위 프로세스는 채점기 폴더에서 실행된다
     names = [v for v in a.variants.split(",") if v in VARIANTS]
     work = Path(str(out) + "_variants")
     work.mkdir(parents=True, exist_ok=True)
@@ -181,7 +181,7 @@ def main():
                  else [(t, [] if t == "sp" else ["--no-spiral"]) for t in sorted(need)])
         for tag, extra in jobs_:
             cpath = work / f"paths_{tag}.pkl"
-            c = subprocess.run([str(VPY), str(ROOT / "v0" / "toolpath_cache.py"), str(job), str(cpath), *extra],
+            c = subprocess.run([str(VPY), str(ROOT / "src" / "toolpath_cache.py"), str(job), str(cpath), *extra],
                                capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=ROOT / "WAAM_Validator")
             if c.returncode == 0 and cpath.exists():
                 caches[tag] = cpath

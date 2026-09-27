@@ -33,6 +33,7 @@ from shapely.geometry import LineString, MultiLineString, Point, Polygon, box
 from shapely.ops import unary_union
 
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))   # 제출용 코드(src/)를 불러 쓴다
 from make_train_jobs3 import plate as plate_body, vase as vase_body  # noqa: E402
 
 SRC_CFG = Path(__file__).resolve().parents[1] / "WAAM_Validator" / "tests" / "01" / "config.yaml"

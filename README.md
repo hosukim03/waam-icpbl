@@ -27,7 +27,10 @@ README.md         이 문서
 CHANGELOG.md      버전별 변경 기록
 docs/             설계 문서(DESIGN.md), 용어집
 data/             시나리오 형상 (git 미추적, 만드는 방법은 data/README.md)
-v0/               알고리즘 코드 (경로 생성·스케줄러·포트폴리오·평가 스크립트)
+src/              제출에 쓰는 코드 (경로 생성·스케줄러·포트폴리오·제출기)
+tools/            평가·형상 생성·분석·그림 스크립트
+experiments/      RL·튜닝·예전 버전 스케줄러 (기록용, 그대로는 실행되지 않을 수 있음)
+archive/          기능을 바꾸기 전 백업과 옛 실행 스크립트 (기록용)
 results/          평가 결과 CSV, results/logs/ 평가 로그
 WAAM_Validator/   교수님 채점기 클론 (git 미추적, 가상환경 .venv 포함)
 ```
@@ -36,12 +39,12 @@ WAAM_Validator/   교수님 채점기 클론 (git 미추적, 가상환경 .venv 
 
 | 파일 | 역할 |
 |---|---|
-| `v0/toolpath.py` | 층 단면에서 적층 경로(동심원·나선·중심선) 생성 |
-| `v0/schedule_v8.py` | 경로를 조각으로 나눠 로봇에 배정하고, 채점기와 같은 규칙으로 충돌을 피하며 시각 부여 |
-| `v0/balance.py` | 부하 균형 배정·섬 배분 |
-| `v0/portfolio.py` | 설정 12개를 코어별로 동시에 돌려 makespan이 가장 짧은 결과 선택 |
-| `v0/export_waam.py` | 제출용 작업 폴더 생성 + 채점기 검증(FAIL이면 다음 설정으로 교체) |
-| `v0/eval_set.py` | 형상 묶음 전체를 생성·채점해 `results/<이름>.csv`로 저장 |
+| `src/toolpath.py` | 층 단면에서 적층 경로(동심원·나선·중심선) 생성 |
+| `src/schedule_v8.py` | 경로를 조각으로 나눠 로봇에 배정하고, 채점기와 같은 규칙으로 충돌을 피하며 시각 부여 |
+| `src/balance.py` | 부하 균형 배정·섬 배분 |
+| `src/portfolio.py` | 설정 12개를 코어별로 동시에 돌려 makespan이 가장 짧은 결과 선택 |
+| `src/export_waam.py` | 제출용 작업 폴더 생성 + 채점기 검증(FAIL이면 다음 설정으로 교체) |
+| `tools/eval_set.py` | 형상 묶음 전체를 생성·채점해 `results/<이름>.csv`로 저장 |
 
 ## 실행 방법 (Windows)
 
@@ -59,13 +62,13 @@ cd ..
 제출물 만들기(공개 모델 01번 예):
 
 ```powershell
-.\WAAM_Validator\.venv\Scripts\python v0\export_waam.py --scenario WAAM_Validator\tests\01 --output out\01
+.\WAAM_Validator\.venv\Scripts\python src\export_waam.py --scenario WAAM_Validator\tests\01 --output out\01
 ```
 
 형상 묶음 평가(생성 + 채점):
 
 ```powershell
-cd v0
+cd tools
 python eval_set.py portfolio.py ..\WAAM_Validator\tests pf_public
 python eval_set.py portfolio.py ..\data\valid_div pf_valid
 ```

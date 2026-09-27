@@ -66,7 +66,8 @@ def main() -> int:
     ap.add_argument("--no-grade", dest="grade", action="store_false", help="채점기 전체 검증·대체 생략")
     a = ap.parse_args()
 
-    scen, out = Path(a.scenario), Path(a.output)
+    # 하위 프로세스가 작업 위치를 채점기 폴더로 바꿔 실행하므로, 상대 경로는 여기서 절대 경로로 바꾼다
+    scen, out = Path(a.scenario).resolve(), Path(a.output).resolve()
     for f in ("config.yaml", "target.stl"):
         if not (scen / f).exists():
             print(f"[오류] 시나리오에 {f} 가 없다: {scen}", file=sys.stderr)
@@ -75,7 +76,7 @@ def main() -> int:
     variants = a.variants or opt.get("variants")
     workers = a.workers or int(opt.get("workers", 0))
 
-    cmd = [str(VPY), str(ROOT / "v0" / "portfolio.py"), str(scen), str(out), "--keep"]
+    cmd = [str(VPY), str(ROOT / "src" / "portfolio.py"), str(scen), str(out), "--keep"]
     if variants:
         cmd += ["--variants", variants]
     if workers:

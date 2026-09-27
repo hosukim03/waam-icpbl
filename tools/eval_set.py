@@ -19,6 +19,14 @@ sched, src, name = sys.argv[1], Path(sys.argv[2]).resolve(), sys.argv[3]
 jobs_dir = ROOT / "jobs_eval" / name
 runs_dir = ROOT / "runs_eval" / name
 out_csv = ROOT / "results" / f"{name}.csv"
+
+
+def _script(name: str) -> Path:
+    """스케줄러 파일 위치: 제출용은 src/, 예전 버전(V7 기준선 등)은 experiments/."""
+    p = ROOT / "src" / name
+    return p if p.exists() else ROOT / "experiments" / name
+
+
 out_csv.parent.mkdir(parents=True, exist_ok=True)
 env = {"PYTHONIOENCODING": "utf-8", **__import__("os").environ}
 
@@ -29,11 +37,11 @@ for d in sorted(p for p in src.iterdir() if (p / "target.stl").exists()):
     job = jobs_dir / d.name
     t0 = time.time()
     if sched == "portfolio.py":          # 여러 방식을 동시에 돌려 가장 짧은 것 선택 (기본 파이썬)
-        g = subprocess.run([sys.executable, str(ROOT / "v0" / "portfolio.py"), str(d), str(job)],
+        g = subprocess.run([sys.executable, str(ROOT / "src" / "portfolio.py"), str(d), str(job)],
                            capture_output=True, text=True, encoding="utf-8", env=env,
-                           cwd=ROOT / "v0")
+                           cwd=ROOT / "src")
     else:
-        g = subprocess.run([str(VPY), str(ROOT / "v0" / sched), str(d), str(job)],
+        g = subprocess.run([str(VPY), str(_script(sched)), str(d), str(job)],
                            capture_output=True, text=True, encoding="utf-8", env=env,
                            cwd=ROOT / "WAAM_Validator")
     gen = time.time() - t0

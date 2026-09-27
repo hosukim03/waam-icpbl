@@ -7,10 +7,10 @@
 |---|---:|---|---|
 | `jobs/` | 6 | 공개 모델 01~06 작업 폴더(초기 실행용) | `WAAM_Validator/tests/01~06` 복사 |
 | `bench/` | 10 | 채점기 일관성 확인용 벤치마크(알고리즘 비교용 아님). `bench/jobs_ours`가 원본 형상 | `WAAM_Validator/scripts/generate_benchmark_jobs.py` |
-| `train_div/` | 30 | 설정 튜닝·학습용 | `python v0/make_jobs_diverse.py data/train_div 30 101` |
-| `valid_div/` | 20 | 설정 선택용 검증 | `python v0/make_jobs_diverse.py data/valid_div 20 202` |
-| `test_div/` | 15 | 처음 보는 형상(시드 303) 일반화 확인 | `python v0/make_jobs_diverse.py data/test_div 15 303` |
-| `holdout404/` | 15 | 처음 보는 형상(시드 404) 일반화 확인 | `python v0/make_jobs_diverse.py data/holdout404 15 404` |
-| `holdout505/` | 15 | 처음 보는 형상(시드 505) 일반화 확인 | `python v0/make_jobs_diverse.py data/holdout505 15 505` |
+| `train_div/` | 30 | 설정 튜닝·학습용 | `python tools/make_jobs_diverse.py data/train_div 30 101` |
+| `valid_div/` | 20 | 설정 선택용 검증 | `python tools/make_jobs_diverse.py data/valid_div 20 202` |
+| `test_div/` | 15 | 처음 보는 형상(시드 303) 일반화 확인 | `python tools/make_jobs_diverse.py data/test_div 15 303` |
+| `holdout404/` | 15 | 처음 보는 형상(시드 404) 일반화 확인 | `python tools/make_jobs_diverse.py data/holdout404 15 404` |
+| `holdout505/` | 15 | 처음 보는 형상(시드 505) 일반화 확인 | `python tools/make_jobs_diverse.py data/holdout505 15 505` |
 
 공개 모델 6개 평가는 교수님 저장소의 `WAAM_Validator/tests`를 그대로 쓴다.

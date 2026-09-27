@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))   # 제출용 코드(src/)를 불러 쓴다
 from waam_validator.config.loader import load_config
 from waam_validator.shape.target import load_target_mesh, slice_target_layers
 
@@ -31,4 +32,4 @@ for k in ks:
           f"크기 {x1 - x0:4.0f}x{y1 - y0:4.0f} 둘레 {A.length:6.0f} 평균벽두께 {wall:5.1f}")
     out[k] = [{"ext": np.asarray(g.exterior.coords).round(1).tolist(),
                "holes": [np.asarray(r.coords).round(1).tolist() for r in g.interiors]} for g in gs]
-json.dump(out, open("../v0/shape05.json", "w"), separators=(",", ":"))
+json.dump(out, open("../tools/shape05.json", "w"), separators=(",", ":"))

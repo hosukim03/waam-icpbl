@@ -31,5 +31,5 @@ for n, d in enumerate(dirs):
     ax.set_title(f"{d.name} {kind}\n{ext[0]:.0f}×{ext[1]:.0f}×{ext[2]:.0f}mm", fontsize=11)
 fig.suptitle("학습 형상 v3 (15개) — 공개 05·04번을 닮은 비선형·무작위 형상", fontsize=16)
 fig.tight_layout()
-fig.savefig(R / "v0" / "shapes_train3.png", facecolor="white")
+fig.savefig(R / "tools" / "shapes_train3.png", facecolor="white")
 print("saved")

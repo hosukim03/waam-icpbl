@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))   # 제출용 코드(src/)를 불러 쓴다
 from waam_validator.config.loader import load_config
 from waam_validator.shape.target import load_target_mesh, slice_target_layers
 
