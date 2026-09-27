@@ -662,7 +662,9 @@ def run(job: Path, opts, policy=None):
             frac = done_len / total_len if total_len > 0 else 0.0
             if frac >= PRUNE_MIN_FRAC and clock / frac > bnd * PRUNE_MARGIN:
                 raise Pruned(f"layer {k}: 예상 {clock / frac:.0f}s > 최선 {bnd:.0f}s×{PRUNE_MARGIN}")
-        z = pr.build_plane_z_mm + (k + 0.5) * pr.layer_height_mm
+        # 적층 Z 는 config 의 tcp_z_reference 를 따른다(top: 층 윗면, center: 층 가운데).
+        # 비교용 단면은 채점기가 기준과 무관하게 층 가운데에서 자르므로 위의 슬라이싱은 그대로 둔다.
+        z = pr.build_plane_z_mm + (k + (1.0 if pr.tcp_z_reference == "top" else 0.5)) * pr.layer_height_mm
         zl = z + LIFT
         if path_cache is not None and k in path_cache:     # 포트폴리오가 미리 계산한 층별 경로
             paths, iou_k = path_cache[k]
