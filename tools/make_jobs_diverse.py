@@ -8,6 +8,8 @@
   중간 : hexgrid(벌집, 공개01), trigrid/sqgrid(격자), spiral(나선, 공개02), truss(삼각 트러스, 공개03),
          islands(떨어진 섬 여러 개), star(별 모양 벽)
   어려움: plate(판+기둥, 공개04), vase(비틀린 꽃병, 공개05), bracket(L자+보강판 속찬 덩어리, 공개06)
+  추가(2026-09-30, 마지막 테스트용 다양성): gear(톱니바퀴), impeller(허브+굽은 날개), letters(속찬 글자),
+         flange(구멍 뚫린 원판), slotplate(슬롯·구멍 판), flare(위로 갈수록 넓어지거나 좁아지는 형상)
 
 높이 방향 변화 (계열과 무관하게 무작위로 붙임)
   prism  : 층마다 같음
@@ -147,14 +149,121 @@ def f_star(r, S, w):
     return wall(LineString(np.column_stack([rr * np.cos(th), rr * np.sin(th)])), w)
 
 
+def f_gear(r, S, w):
+    """속찬 톱니바퀴: 이(齒)가 바깥으로 튀어나온 원판 + 가운데 구멍. 이 폭은 비드 폭 이상."""
+    S = min(S, 200.0)
+    n = int(r.integers(8, 21))
+    n = max(4, min(n, int(math.pi * S / max(w, 8.0))))    # 이 하나의 폭(반 피치)이 w 이상이 되게
+    depth = float(np.clip(S * r.uniform(0.10, 0.18), w, S * 0.3))
+    ri = S - depth
+    pts = []
+    for k in range(n):
+        a0 = 2 * math.pi * k / n
+        for f0, f1, rad in ((0.0, 0.5, ri), (0.5, 1.0, S)):
+            for t in np.linspace(a0 + f0 * 2 * math.pi / n, a0 + f1 * 2 * math.pi / n, 4):
+                pts.append((rad * math.cos(t), rad * math.sin(t)))
+    g = Polygon(pts).buffer(0)
+    bore = float(np.clip(S * r.uniform(0.2, 0.4), 5.0, max(5.0, ri - w)))
+    return g.difference(Point(0, 0).buffer(bore, 64))
+
+
+def f_impeller(r, S, w):
+    """임펠러: 가운데 허브(원판 또는 고리) + 바깥으로 굽어 나가는 날개(두께 w) 여러 장."""
+    hub = float(np.clip(S * r.uniform(0.2, 0.35), w, max(w, S - w)))
+    n = int(r.integers(3, 8))
+    sweep = math.radians(r.uniform(40, 120)) * float(r.choice([-1, 1]))
+    r0 = hub * 0.8
+    blades = []
+    for k in range(n):
+        a0 = 2 * math.pi * k / n
+        rr = np.linspace(r0, S, 60)
+        th = a0 + sweep * (rr - r0) / max(S - r0, 1.0)
+        blades.append(wall(LineString(np.column_stack([rr * np.cos(th), rr * np.sin(th)])), w))
+    disc = Point(0, 0).buffer(hub, 64)
+    if r.random() < 0.5 and hub * 0.5 >= w:
+        disc = disc.difference(Point(0, 0).buffer(hub * 0.5, 64))
+    return unary_union([disc] + blades)
+
+
+def _letter(ch, t):
+    """단위 사각형(폭 0.7, 높이 1) 안의 속찬 대문자. t = 획 두께(높이 기준 비율)."""
+    B = box
+    m = 0.35
+    L = {
+        "I": [B(m - t / 2, 0, m + t / 2, 1)],
+        "L": [B(0, 0, t, 1), B(0, 0, 0.7, t)],
+        "T": [B(0, 1 - t, 0.7, 1), B(m - t / 2, 0, m + t / 2, 1)],
+        "H": [B(0, 0, t, 1), B(0.7 - t, 0, 0.7, 1), B(0, 0.5 - t / 2, 0.7, 0.5 + t / 2)],
+        "E": [B(0, 0, t, 1), B(0, 0, 0.7, t), B(0, 1 - t, 0.7, 1), B(0, 0.5 - t / 2, 0.6, 0.5 + t / 2)],
+        "F": [B(0, 0, t, 1), B(0, 1 - t, 0.7, 1), B(0, 0.5 - t / 2, 0.6, 0.5 + t / 2)],
+        "U": [B(0, 0, t, 1), B(0.7 - t, 0, 0.7, 1), B(0, 0, 0.7, t)],
+        "C": [B(0, 0, t, 1), B(0, 0, 0.7, t), B(0, 1 - t, 0.7, 1)],
+        "O": [B(0, 0, 0.7, 1).difference(B(t, t, 0.7 - t, 1 - t))],
+        "J": [B(0.7 - t, 0, 0.7, 1), B(0, 0, 0.7, t), B(0, 0, t, 0.4)],
+        "P": [B(0, 0, t, 1), B(0, 1 - t, 0.7, 1), B(0.7 - t, 0.5, 0.7, 1), B(0, 0.5, 0.7, 0.5 + t)],
+    }
+    return unary_union(L[ch])
+
+
+def f_letters(r, S, w):
+    """속찬 대문자 1~3개를 나란히. 획 두께는 비드 폭 이상."""
+    h = float(min(1.6 * S, 320.0))
+    t = max(w / h, 0.2)
+    n = 1 if h > 220 else int(r.integers(1, 4))
+    chars = r.choice(list("ILTHEFUCOJP"), size=n)
+    gap = 0.15
+    parts = []
+    for i, ch in enumerate(chars):
+        g = affinity.scale(_letter(str(ch), t), h, h, origin=(0, 0))
+        parts.append(affinity.translate(g, i * (0.7 + gap) * h, 0))
+    g = unary_union(parts)
+    minx, miny, maxx, maxy = g.bounds
+    return affinity.translate(g, -(minx + maxx) / 2, -(miny + maxy) / 2)
+
+
+def f_flange(r, S, w):
+    """플랜지: 원판 + 가운데 큰 구멍 + 둘레의 볼트 구멍. 구멍 사이 살은 비드 폭 이상."""
+    S = float(np.clip(S, 60, 220))
+    bore = S * r.uniform(0.2, 0.4)
+    n = int(r.integers(3, 9))
+    pc = (S + bore) / 2
+    hr = float(np.clip(S * r.uniform(0.06, 0.12), 3.0, max(3.0, (S - bore) / 2 - w)))
+    g = Point(0, 0).buffer(S, 96).difference(Point(0, 0).buffer(bore, 64))
+    holes = [Point(pc * math.cos(a), pc * math.sin(a)).buffer(hr, 32)
+             for a in np.linspace(0, 2 * math.pi, n, endpoint=False) + r.uniform(0, math.pi)]
+    return g.difference(unary_union(holes))
+
+
+def f_slotplate(r, S, w):
+    """슬롯·구멍이 뚫린 속찬 판(사각 또는 원). 구멍끼리 너무 가까우면 합쳐 얇은 살을 없앤다."""
+    S = min(S, 220.0)
+    a = S * r.uniform(0.5, 1.0)
+    plate = box(-S, -a, S, a) if r.random() < 0.6 else Point(0, 0).buffer(S, 96)
+    cuts = []
+    for _ in range(int(r.integers(2, 7))):
+        if r.random() < 0.5:                                    # 긴 슬롯(크기는 판에 비례)
+            L, ww = r.uniform(0.3, 0.9) * S, max(8.0, r.uniform(0.06, 0.14) * S)
+            g = LineString([(-L / 2, 0), (L / 2, 0)]).buffer(ww / 2, 16)
+            g = affinity.rotate(g, float(r.choice([0.0, 90.0, r.uniform(0, 180)])), origin=(0, 0))
+        else:                                                   # 둥근 구멍
+            g = Point(0, 0).buffer(max(8.0, r.uniform(0.08, 0.2) * S), 32)
+        cuts.append(affinity.translate(g, r.uniform(-S, S) * 0.7, r.uniform(-a, a) * 0.7))
+    cut = unary_union(cuts).buffer(w / 2, 8).buffer(-w / 2, 8)   # 구멍 사이 틈이 w 보다 좁으면 합침
+    inner = plate.buffer(-1.5 * w)                              # 가장자리 살은 남긴다
+    return plate.difference(cut.intersection(inner))
+
+
 SECTIONS = {
     "line": f_line, "ring": f_ring, "rect": f_rect, "block": f_block, "wave": f_wave,
     "hexgrid": f_hexgrid, "sqgrid": f_sqgrid, "trigrid": f_trigrid, "spiral": f_spiral,
     "truss": f_truss, "islands": f_islands, "star": f_star,
+    "gear": f_gear, "impeller": f_impeller, "letters": f_letters, "flange": f_flange, "slotplate": f_slotplate,
 }
 LEVEL = {"line": "쉬움", "ring": "쉬움", "rect": "쉬움", "block": "쉬움", "wave": "쉬움",
          "hexgrid": "중간", "sqgrid": "중간", "trigrid": "중간", "spiral": "중간", "truss": "중간",
-         "islands": "중간", "star": "중간", "plate": "어려움", "vase": "어려움", "bracket": "어려움"}
+         "islands": "중간", "star": "중간", "plate": "어려움", "vase": "어려움", "bracket": "어려움",
+         "gear": "중간", "impeller": "어려움", "letters": "중간", "flange": "중간", "slotplate": "중간",
+         "flare": "어려움"}
 
 
 # ---------------------------------------------------------------- 구간 쌓기
@@ -189,6 +298,8 @@ def gen_section_family(r, name):
     sub = int(r.integers(0, 2 ** 31))                  # 같은 모양을 크기만 바꿔 다시 그리기 위한 난수 씨앗
     base = SECTIONS[name](np.random.default_rng(sub), S, w)
     mode = r.choice(["prism", "steps", "lean", "drop"], p=[0.3, 0.3, 0.2, 0.2])
+    if name == "impeller" and mode in ("steps", "drop"):        # 날개가 구간마다 바뀌면 뒤엉켜 보인다
+        mode = "prism"
     total = int(r.integers(3, 61))
     nseg = 1 if mode == "prism" else int(r.integers(2, 6))
     cut = np.sort(r.choice(np.arange(1, total), size=min(nseg - 1, total - 1), replace=False)) if nseg > 1 else []
@@ -229,7 +340,29 @@ def gen_bracket(r):
     return stack(secs, segs, [(cx, cy)] * len(secs)), f"bracket L{L:.0f} 두께{t:.0f} {sum(segs)}층"
 
 
+def gen_flare(r):
+    """위로 갈수록 넓어지거나(오버행) 좁아지는 형상: 같은 단면을 크기만 단조롭게 바꿔 구간마다 다시 그린다."""
+    base = str(r.choice(["ring", "rect", "star", "block", "hexgrid", "gear", "flange"]))
+    S = r.uniform(60, 260)
+    w = float(r.choice([8.0, 8.0, 16.0]))
+    sub = int(r.integers(0, 2 ** 31))
+    grow = r.random() < 0.7
+    s0, s1 = r.uniform(0.45, 0.7), r.uniform(1.1, 1.4)
+    if not grow:
+        s0, s1 = s1, s0
+    nseg = int(r.integers(5, 13))
+    total = int(r.integers(2 * nseg, 61))
+    seg_layers = np.diff(np.linspace(0, total, nseg + 1).astype(int))
+    p = r.uniform(0.6, 1.8)                                   # 비선형으로 커지거나 작아짐
+    secs = [SECTIONS[base](np.random.default_rng(sub), S * (s0 + (s1 - s0) * (i / (nseg - 1)) ** p), w)
+            for i in range(nseg)]
+    cx, cy = r.uniform(-1, 1) * (RMAX - S * max(s0, s1)) * 0.5, r.uniform(-1, 1) * (RMAX - S * max(s0, s1)) * 0.5
+    return stack(secs, seg_layers, [(cx, cy)] * nseg),         f"flare/{base} {'넓어짐' if grow else '좁아짐'} 폭~{2 * S:.0f} 벽{w:.0f} {total}층"
+
+
 def make_one(r, name):
+    if name == "flare":
+        return gen_flare(r)
     if name == "plate":
         for _ in range(100):
             m, d = plate_body(r)
@@ -261,7 +394,7 @@ def validator_accepts(d: Path) -> bool:
 
 def make(out: Path, n: int, seed: int):
     r = np.random.default_rng(seed)
-    names = list(SECTIONS) + ["plate", "vase", "bracket"]
+    names = list(SECTIONS) + ["plate", "vase", "bracket", "flare"]
     out.mkdir(parents=True, exist_ok=True)
     order = [names[i % len(names)] for i in range(n)]      # 계열이 골고루 나오게 돌아가며
     r.shuffle(order)

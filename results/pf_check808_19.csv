@@ -1,0 +1,2 @@
+﻿job,level,desc,status,makespan_s,gen_s,iou,collisions,reasons
+19,중간,중간 flange/drop 중간 폭~305 벽8 40층,PASS,33425.5,241.4,0.978,0,

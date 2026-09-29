@@ -194,6 +194,14 @@ def deposit(paths: list[np.ndarray]) -> BaseGeometry:
         return union_all([shapely.make_valid(b) for b in B], grid_size=1e-6)
 
 
+def _inter(a: BaseGeometry, b: BaseGeometry) -> BaseGeometry:
+    """교집합. 빈틈 영역처럼 버퍼를 거친 도형이 살짝 깨져 GEOS 가 실패하면 도형을 바로잡고 격자에 맞춰 다시 계산한다."""
+    try:
+        return a.intersection(b)
+    except shapely.errors.GEOSException:
+        return shapely.intersection(shapely.make_valid(a), shapely.make_valid(b), grid_size=1e-6)
+
+
 def score(A: BaseGeometry, paths: list[np.ndarray]) -> dict:
     Dp = deposit(paths)
     inter = A.intersection(Dp).area
@@ -224,7 +232,7 @@ def best_paths(A: BaseGeometry, legacy: bool = False, spiral: bool = True, both:
             base = concentric(A, s_main, join="mitre")
             gap = A.difference(deposit(base)).buffer(-0.5).buffer(0.5)
             if gap.area > 4.0:
-                cands.append((f"mitre{s_main}+medial", base + medial(gap.buffer(R * 0.5).intersection(A), spacing=GAP_SPACING)))
+                cands.append((f"mitre{s_main}+medial", base + medial(_inter(gap.buffer(R * 0.5), A), spacing=GAP_SPACING)))
     for s in tuple(W * r for r in STEP_RATIOS):
         rings = {jn: concentric(A, s, join=jn) for jn in ("round", "mitre")}
         cands.append((f"concentric{s}", rings["round"]))
@@ -237,14 +245,14 @@ def best_paths(A: BaseGeometry, legacy: bool = False, spiral: bool = True, both:
             cands.append((f"linked{s}{jn}", P))
             gap = A.difference(deposit(P)).buffer(-0.5).buffer(0.5)
             if gap.area > 4.0:
-                cands.append((f"linked{s}{jn}+medial", P + medial(gap.buffer(R * 0.5).intersection(A), spacing=GAP_SPACING)))
+                cands.append((f"linked{s}{jn}+medial", P + medial(_inter(gap.buffer(R * 0.5), A), spacing=GAP_SPACING)))
     for dl in (0.15, 0.3, 0.5):
         cands.append((f"sliver{dl}", sliver(A, dl)))
     # 두꺼운 영역은 동심원, 거기서 남은 얇은 틈은 sliver 로 보강
     base = concentric(A, s_main)
     gap = A.difference(deposit(base)).buffer(0)
     if gap.area > 1.0:
-        extra = [p for p in sliver(A, 0.3) if LineString(p).buffer(R).intersection(gap).area > 0.5 * LineString(p).length]
+        extra = [p for p in sliver(A, 0.3) if _inter(LineString(p).buffer(R), gap).area > 0.5 * LineString(p).length]
         cands.append((f"concentric{s_main}+sliver", base + extra))
     # 모서리 보강: 남은 빈틈의 각 조각 중심선을 짧게 추가
     for name0, P0 in list(cands):
