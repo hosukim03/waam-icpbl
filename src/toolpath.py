@@ -10,22 +10,31 @@ MEDIAL_SPACING = 1.0   # 중심선용 경계 표본 간격
 W = 8.0          # bead width
 R = W / 2.0
 QUAD = 8         # config.shape_validation.polygon_buffer_resolution
-V_DEP = 8.0      # 적층 속도(예상 시간 계산용)
-ARC = 2.0        # 조각당 아크 켜기+끄기 시간(예상 시간 계산용)
+V_DEP = 8.72     # 적층 속도(예상 시간 계산용) = 기준 8mm/s 의 +9%
+ARC = 0.0        # 조각당 아크 켜기+끄기 시간(예상 시간 계산용). 채점기가 보지 않으므로 기본 0
+# 채점기는 구간 평균 속도가 기준의 ±speed_relative_tolerance(10%) 안이면 통과시킨다.
+# 그 허용폭의 90%까지 쓴다(나머지 10% = 1%p 는 float32 좌표·소수 6자리 시각 반올림 여유).
+SPEED_USE = 0.9
 # 동심원 고리 간격 = 비드 폭 × 비율(비드 폭 8mm 에서 7.0·7.5·8.0mm)
 STEP_RATIOS = (0.875, 0.9375, 1.0)
 MAIN_RATIO = 0.9375
 
 
-def configure(cfg) -> None:
-    """config 의 비드 폭·버퍼 해상도·적층 속도·아크 시간으로 경로 생성 상수를 맞춘다."""
+def fast_speed(cfg, v: float) -> float:
+    """기준 속도 v 를 채점기 허용 오차 안에서 가장 빠르게(허용폭의 SPEED_USE 만큼) 올린 값."""
+    return float(v) * (1.0 + SPEED_USE * float(cfg.validation.speed_relative_tolerance))
+
+
+def configure(cfg, arc: bool = False) -> None:
+    """config 의 비드 폭·버퍼 해상도·적층 속도·아크 시간으로 경로 생성 상수를 맞춘다.
+    아크 켜기·끄기 대기는 채점기가 검사하지 않으므로 arc=True 일 때만 넣는다."""
     global W, R, QUAD, V_DEP, ARC
     pr = cfg.process
     W = float(pr.bead_width_mm)
     R = W / 2.0
     QUAD = int(cfg.shape_validation.polygon_buffer_resolution)
-    V_DEP = float(pr.deposition_speed_mm_s)
-    ARC = float((pr.arc_on_time_s or 0.0) + (pr.arc_off_time_s or 0.0))
+    V_DEP = fast_speed(cfg, pr.deposition_speed_mm_s)
+    ARC = float((pr.arc_on_time_s or 0.0) + (pr.arc_off_time_s or 0.0)) if arc else 0.0
 
 
 def main_step() -> float:

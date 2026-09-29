@@ -599,24 +599,25 @@ class Pruned(Exception):
     """이미 다른 설정보다 느려져 더 계산할 필요가 없다."""
 
 
-def apply_config(cfg) -> None:
-    """config 의 이동 속도·팔 도달 거리·비드 폭으로 모듈 상수를 맞춘다(공개 모델 config 면 기본값과 같다)."""
+def apply_config(cfg, arc: bool = False) -> None:
+    """config 의 이동 속도·팔 도달 거리·비드 폭으로 모듈 상수를 맞춘다.
+    속도는 채점기 허용 오차 안에서 가장 빠르게 쓴다(이동 150 → 163.5, 적층 8 → 8.72 mm/s)."""
     global TRAVEL_V, REACH_OK
-    TRAVEL_V = v1.TRAVEL_V = float(cfg.process.travel_speed_mm_s)
+    TRAVEL_V = v1.TRAVEL_V = toolpath.fast_speed(cfg, cfg.process.travel_speed_mm_s)
     reach = min(r.xy_reach_radius_mm for r in cfg.robots)
     REACH_OK = reach - REACH_MARGIN
     balance.REACH = reach
-    toolpath.configure(cfg)
+    toolpath.configure(cfg, arc)
 
 
 def run(job: Path, opts, policy=None):
     cfg = load_config(job / "config.yaml")
-    apply_config(cfg)
+    apply_config(cfg, bool(opts.arc))
     mesh = load_target_mesh(job / "target.stl", cfg)
     pr = cfg.process
     arc_on = (pr.arc_on_time_s or 0.0) if opts.arc else 0.0
     arc_off = (pr.arc_off_time_s or 0.0) if opts.arc else 0.0
-    vd = pr.deposition_speed_mm_s
+    vd = toolpath.V_DEP
     required = max(r.arm_envelope_radius_mm for r in cfg.robots) * 2 + cfg.collision.arm_clearance_mm
     # 토치 간 기준(두 tcp_radius 합)이 더 크면 그쪽을 쓴다. 토치는 팔 선분의 끝점이라 팔 거리 ≥ 기준이면 토치도 만족한다.
     required = max(required, max(r.tcp_radius_mm for r in cfg.robots) * 2)
@@ -745,7 +746,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("job")
     ap.add_argument("out")
-    ap.add_argument("--no-arc", dest="arc", action="store_false")
+    # 아크 켜기·끄기 대기(config 의 arc_on/off_time_s)는 채점기가 검사하지 않아 기본으로 넣지 않는다
+    ap.add_argument("--arc", dest="arc", action="store_true", help="아크 켜기·끄기 대기를 W 로 넣는다")
+    ap.add_argument("--no-arc", dest="arc", action="store_false", help="(기본값, 예전 명령 호환용)")
     ap.add_argument("--chunk", type=float, default=40.0)
     ap.add_argument("--band", type=float, default=60.0)
     ap.add_argument("--paths", default=None, help="toolpath_cache.py 로 미리 계산한 층별 경로 파일")

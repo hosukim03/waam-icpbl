@@ -12,5 +12,9 @@
 | `test_div/` | 15 | 처음 보는 형상(시드 303) 일반화 확인 | `python tools/make_jobs_diverse.py data/test_div 15 303` |
 | `holdout404/` | 15 | 처음 보는 형상(시드 404) 일반화 확인 | `python tools/make_jobs_diverse.py data/holdout404 15 404` |
 | `holdout505/` | 15 | 처음 보는 형상(시드 505) 일반화 확인 | `python tools/make_jobs_diverse.py data/holdout505 15 505` |
+| `final_test/` | 20 | **마지막 테스트용 봉인 묶음(2026-09-29 생성).** 결과를 보고 설정을 고치는 데 쓰지 않고, 최종 버전에서 한 번만 평가한다 | `python tools/make_jobs_diverse.py data/final_test 20 707` |
+
+`train_div`부터 `holdout505`까지 81개는 설정을 고를 때 결과를 이미 봤으므로 연습용이다.
+처음 보는 형상에서의 성능은 `final_test`로만 판단한다.
 
 공개 모델 6개 평가는 교수님 저장소의 `WAAM_Validator/tests`를 그대로 쓴다.
