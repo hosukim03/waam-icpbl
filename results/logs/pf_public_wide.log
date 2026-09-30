@@ -1,0 +1,17 @@
+pf_public_wide 01 [] PASS makespan=864.0 gen=20.8s coll=0 
+pf_public_wide 02 [] PASS makespan=1404.7 gen=29.1s coll=0 
+pf_public_wide 03 [] PASS makespan=1308.1 gen=50.8s coll=0 
+pf_public_wide 04 [] PASS makespan=26729.1 gen=338.0s coll=0 
+Traceback (most recent call last):
+  File "C:\projects\waam\tools\eval_set.py", line 54, in <module>
+    shutil.rmtree(run)                          # 이 스크립트가 만든 이전 채점 결과만 비움
+    ~~~~~~~~~~~~~^^^^^
+  File "C:\Anaconda\Lib\shutil.py", line 790, in rmtree
+    return _rmtree_unsafe(path, onexc)
+  File "C:\Anaconda\Lib\shutil.py", line 629, in _rmtree_unsafe
+    onexc(os.unlink, fullname, err)
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Anaconda\Lib\shutil.py", line 625, in _rmtree_unsafe
+    os.unlink(fullname)
+    ~~~~~~~~~^^^^^^^^^^
+PermissionError: [WinError 32] 다른 프로세스가 파일을 사용 중이기 때문에 프로세스가 액세스 할 수 없습니다: 'C:\\projects\\waam\\runs_eval\\pf_public_wide\\05\\run.log'

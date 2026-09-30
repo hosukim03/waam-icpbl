@@ -1,0 +1,11 @@
+﻿job,level,desc,status,makespan_s,gen_s,iou,collisions,reasons
+01,,,PASS,864.0,24.7,0.976,0,
+02,,,PASS,1404.7,22.1,0.997,0,
+03,,,PASS,1308.1,21.9,0.985,0,
+04,,,PASS,26729.1,5226.7,0.948,0,
+05,,,VAL_ERR2,,864.4,,,"NGED_DURING_VALIDATION
+Message : Validation 실행 중 입력 파일이 변경되었습니다. 변경이 끝난 뒤 다시 실행하세요.
+Input   : C:\projects\waam\jobs_eval\pf_public_wide\05
+============================================================
+"
+06,,,PASS,5303.9,24.3,0.961,0,
