@@ -3,7 +3,7 @@
 
 사용자 지적: "어려운 것만 만들어서 돌리면 그게 일반화냐" → 쉬운 것부터 어려운 것까지 골고루.
 
-계열 14가지 (난이도는 스케줄링 관점의 대략적인 구분)
+계열 21가지 (난이도는 스케줄링 관점의 대략적인 구분)
   쉬움 : line(막대), ring(원형 벽), rect(사각 벽), block(작은 속찬 덩어리), wave(물결선)
   중간 : hexgrid(벌집, 공개01), trigrid/sqgrid(격자), spiral(나선, 공개02), truss(삼각 트러스, 공개03),
          islands(떨어진 섬 여러 개), star(별 모양 벽)
@@ -357,7 +357,8 @@ def gen_flare(r):
     secs = [SECTIONS[base](np.random.default_rng(sub), S * (s0 + (s1 - s0) * (i / (nseg - 1)) ** p), w)
             for i in range(nseg)]
     cx, cy = r.uniform(-1, 1) * (RMAX - S * max(s0, s1)) * 0.5, r.uniform(-1, 1) * (RMAX - S * max(s0, s1)) * 0.5
-    return stack(secs, seg_layers, [(cx, cy)] * nseg),         f"flare/{base} {'넓어짐' if grow else '좁아짐'} 폭~{2 * S:.0f} 벽{w:.0f} {total}층"
+    desc = f"flare/{base} {'넓어짐' if grow else '좁아짐'} 폭~{2 * S:.0f} 벽{w:.0f} {total}층"
+    return stack(secs, seg_layers, [(cx, cy)] * nseg), desc
 
 
 def make_one(r, name):
