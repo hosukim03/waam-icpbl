@@ -313,6 +313,10 @@ GLOBAL_IOU = 0.92        # 전체 기준 0.90 + 여유 (configure 가 config 로
 LAYER_IOU_MIN = 0.85     # 층별 기준 0.80 + 여유
 GLOBAL_IOU_MARGIN = 0.02
 LAYER_IOU_MARGIN = 0.05
+# 조각 하나당 준비 비용(s): 들어올림·이동·내림과 충돌 회피 대기. 아크 대기(ARC)를 뺀 뒤로 예상 시간에
+# 조각 수가 안 들어가서, 02 에서 비드 끝 둥근 면적으로 IoU 를 채우는 점 392개짜리 경로(955mm)가
+# 한 줄 중심선(1,978mm)보다 빠르다고 잘못 골랐다(makespan +17%). 0.3s 넘으면 걸러진다.
+PIECE_TIME = 1.0
 
 
 def frontier(A: BaseGeometry, spiral: bool = True, both: bool = False):
@@ -324,7 +328,7 @@ def frontier(A: BaseGeometry, spiral: bool = True, both: bool = False):
         if not P:
             continue
         sc = score(A, P)
-        rows.append((name, est_time(sc), sc, P))
+        rows.append((name, est_time(sc) + PIECE_TIME * sc["pieces"], sc, P))
 
     def pick(rs):
         ok = [r for r in rs if r[2]["iou"] >= LAYER_IOU_MIN and r[2]["overfill"] <= OVERFILL_MAX]
