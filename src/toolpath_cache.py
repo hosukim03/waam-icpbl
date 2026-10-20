@@ -36,9 +36,9 @@ def _slice(job: Path):
     return slice_target_layers(mesh, list(range(n)), cfg)
 
 
-def _init(job, spiral=True, both=False):
-    global _SPIRAL, _BOTH
-    _SPIRAL, _BOTH = spiral, both
+def _init(job, spiral=True, both=False, glob=True):
+    global _SPIRAL, _BOTH, _GLOBAL
+    _SPIRAL, _BOTH, _GLOBAL = spiral, both, glob
     # 단면 도형은 pickle 로 넘기면 정밀도 격자·좌표가 미세하게 바뀌어 경로가 달라진다.
     # 그래서 워커마다 STL 을 직접 잘라 스케줄러와 똑같은 도형을 쓴다.
     global _LAYERS
@@ -51,8 +51,15 @@ _SPIRAL = True
 _BOTH = False
 
 
+# True: 층마다 후보 목록(frontier)만 계산하고, 전체 IoU 예산으로 층별 경로를 한꺼번에 고른다(toolpath.select_global).
+# False: 층마다 IOU_TARGET 을 넘는 가장 빠른 경로(예전 방식, --per-layer)
+_GLOBAL = True
+
+
 def _work(k):
-    from toolpath import best_paths
+    from toolpath import best_paths, frontier
+    if _GLOBAL:
+        return k, frontier(_LAYERS[k], spiral=_SPIRAL, both=_BOTH), None
     if _BOTH:                                   # 나선 포함·고리만 두 결과를 한 번에
         (p1, s1, _), (p2, s2, _) = best_paths(_LAYERS[k], spiral=True, both=True)
         return k, (p1, p2), (s1["iou"], s2["iou"])
@@ -117,9 +124,10 @@ def _work_block(ks):
     return out
 
 
-def build(job: Path, workers: int = 0, spiral: bool = True, both: bool = False, reuse: bool = False):
-    global _LAYERS, _SPIRAL, _BOTH
-    _SPIRAL, _BOTH = spiral, both
+def build(job: Path, workers: int = 0, spiral: bool = True, both: bool = False, reuse: bool = False,
+          glob: bool = True):
+    global _LAYERS, _SPIRAL, _BOTH, _GLOBAL
+    _SPIRAL, _BOTH, _GLOBAL = spiral, both, glob and not reuse
     _LAYERS = _slice(job)
     tasks = [k for k in range(len(_LAYERS)) if not _LAYERS[k].is_empty]
     nw = workers or mp.cpu_count()
@@ -141,9 +149,17 @@ def build(job: Path, workers: int = 0, spiral: bool = True, both: bool = False, 
             k, p, iou = _work(t)
             out[k] = (p, iou)
     else:
-        with mp.Pool(min(nw, len(tasks)), initializer=_init, initargs=(str(job), spiral, both)) as pool:
+        with mp.Pool(min(nw, len(tasks)), initializer=_init, initargs=(str(job), spiral, both, _GLOBAL)) as pool:
             for k, p, iou in pool.imap_unordered(_work, tasks, chunksize=max(1, len(tasks) // (nw * 4))):
                 out[k] = (p, iou)
+    if _GLOBAL:                                 # out[k] = (frontier, None) → 전체 IoU 예산으로 고르기
+        from toolpath import select_global
+        if both:
+            sp = select_global({k: f[0] for k, (f, _) in out.items()})
+            ring = select_global({k: f[1] for k, (f, _) in out.items()})
+            out = {k: ((sp[k][0], ring[k][0]), (sp[k][1], ring[k][1]), (sp[k][2], ring[k][2])) for k in out}
+        else:
+            out = select_global({k: f for k, (f, _) in out.items()})
     return out
 
 
@@ -163,13 +179,15 @@ def main():
                     help="아래층 경로가 이 층 형상 기준을 통과하면 재사용(경로 계산 시간 단축)")
     ap.add_argument("--no-spiral", dest="spiral", action="store_false",
                     help="고리를 이어 붙인 나선 경로를 후보에서 뺀다")
+    ap.add_argument("--per-layer", dest="glob", action="store_false",
+                    help="전체 IoU 예산 대신 층마다 IOU_TARGET 을 넘는 가장 빠른 경로를 쓴다(예전 방식)")
     a = ap.parse_args()
     t0 = time.time()
-    data = build(Path(a.job), a.workers, a.spiral, both=bool(a.both), reuse=a.reuse)
+    data = build(Path(a.job), a.workers, a.spiral, both=bool(a.both), reuse=a.reuse, glob=a.glob)
     Path(a.cache).parent.mkdir(parents=True, exist_ok=True)
-    if a.both:                                  # (나선, 고리) 쌍을 두 파일로 나눠 저장
-        sp = {k: (p[0], iou[0]) for k, (p, iou) in data.items()}
-        ring = {k: (p[1], iou[1]) for k, (p, iou) in data.items()}
+    if a.both:                                  # (나선, 고리) 쌍을 두 파일로 나눠 저장 (전체 IoU 예산이면 여유도 함께)
+        sp = {k: tuple(x[0] for x in v) for k, v in data.items()}
+        ring = {k: tuple(x[1] for x in v) for k, v in data.items()}
         with open(a.both, "wb") as f:
             pickle.dump(ring, f, protocol=pickle.HIGHEST_PROTOCOL)
         data = sp

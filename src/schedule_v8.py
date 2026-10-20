@@ -655,6 +655,10 @@ def run(job: Path, opts, policy=None):
             path_cache = pickle.load(_f)
     bound_file = getattr(opts, "bound_file", None)
     reuse_prev, prev_paths = bool(getattr(opts, "reuse_prev", False)), None
+    # 아래층 경로로 바꿀 때 쓸 수 있는 전체 IoU 여유(캐시가 고른 경로들의 여유 합에서 시작)
+    surplus = 0.0
+    if path_cache is not None:
+        surplus = max(0.0, float(sum(v[2] for v in path_cache.values() if len(v) > 2)))
     # 예상 완료 시각으로 가지치기하려면 전체 적층 길이가 필요하다(경로 캐시가 있을 때만)
     lens = {}
     if bound_file and path_cache is not None:
@@ -683,8 +687,11 @@ def run(job: Path, opts, policy=None):
         # 비교용 단면은 채점기가 기준과 무관하게 층 가운데에서 자르므로 위의 슬라이싱은 그대로 둔다.
         z = pr.build_plane_z_mm + (k + (1.0 if pr.tcp_z_reference == "top" else 0.5)) * pr.layer_height_mm
         zl = z + LIFT
+        slack_k = None
         if path_cache is not None and k in path_cache:     # 포트폴리오가 미리 계산한 층별 경로
-            paths, iou_k = path_cache[k]
+            paths, iou_k = path_cache[k][0], path_cache[k][1]
+            if len(path_cache[k]) > 2:                     # 전체 IoU 예산으로 고른 캐시는 층별 여유도 있다
+                slack_k = path_cache[k][2]
         else:
             paths, sc, _ = best_paths(A)
             iou_k = sc["iou"]
@@ -692,7 +699,15 @@ def run(job: Path, opts, policy=None):
             # 아래층 경로가 이 층 형상 기준도 통과하면 그대로 쓴다(점수만 재므로 싸다). 결과가 경로의
             # 사소한 차이에 크게 흔들려서, 새로 고른 경로 쪽 설정과 함께 돌리면 형상마다 좋은 쪽이 뽑힌다.
             sc_prev = _tp_score(A, prev_paths)
-            if sc_prev["iou"] >= _IOU_T and sc_prev["overfill"] <= _OVER_M:
+            if slack_k is None:                    # 층마다 기준을 넘긴 경로(캐시 없음·예전 캐시)
+                ok = sc_prev["iou"] >= _IOU_T
+            else:
+                # 전체 IoU 예산으로 고른 캐시: 바꿔도 지금까지의 여유 합이 0 아래로 내려가지 않을 때만 바꾼다
+                gain = sc_prev["inter"] - toolpath.GLOBAL_IOU * sc_prev["union"] - slack_k
+                ok = sc_prev["iou"] >= toolpath.LAYER_IOU_MIN and surplus + gain >= 0
+                if ok:
+                    surplus += gain
+            if ok and sc_prev["overfill"] <= _OVER_M:
                 paths, iou_k = prev_paths, sc_prev["iou"]
         prev_paths = paths
         min_iou = min(min_iou, iou_k)

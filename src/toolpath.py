@@ -28,13 +28,16 @@ def fast_speed(cfg, v: float) -> float:
 def configure(cfg, arc: bool = False) -> None:
     """config 의 비드 폭·버퍼 해상도·적층 속도·아크 시간으로 경로 생성 상수를 맞춘다.
     아크 켜기·끄기 대기는 채점기가 검사하지 않으므로 arc=True 일 때만 넣는다."""
-    global W, R, QUAD, V_DEP, ARC
+    global W, R, QUAD, V_DEP, ARC, GLOBAL_IOU, LAYER_IOU_MIN
     pr = cfg.process
     W = float(pr.bead_width_mm)
     R = W / 2.0
     QUAD = int(cfg.shape_validation.polygon_buffer_resolution)
     V_DEP = fast_speed(cfg, pr.deposition_speed_mm_s)
     ARC = float((pr.arc_on_time_s or 0.0) + (pr.arc_off_time_s or 0.0)) if arc else 0.0
+    sv = cfg.shape_validation
+    GLOBAL_IOU = float(sv.minimum_overall_iou) + GLOBAL_IOU_MARGIN
+    LAYER_IOU_MIN = float(sv.minimum_layer_iou) + LAYER_IOU_MARGIN
 
 
 def main_step() -> float:
@@ -207,6 +210,7 @@ def score(A: BaseGeometry, paths: list[np.ndarray]) -> dict:
     inter = A.intersection(Dp).area
     union = A.union(Dp).area
     return {"iou": inter / union if union else 0.0,
+            "inter": inter, "union": union,
             "coverage": inter / A.area if A.area else 0.0,
             "overfill": (Dp.area - inter) / A.area if A.area else 0.0,
             "length": float(sum(LineString(p).length for p in paths)),
@@ -219,9 +223,8 @@ IOU_TARGET = 0.92      # 층별 기준 0.80 / 전체 0.90 보다 여유 있게
 OVERFILL_MAX = 0.25    # 기준 0.30 보다 여유 있게
 
 
-def best_paths(A: BaseGeometry, legacy: bool = False, spiral: bool = True, both: bool = False):
-    """후보 경로들 중 형상 기준(여유 포함)을 만족하는 것 가운데 예상 적층시간이 가장 짧은 것.
-    만족하는 후보가 없으면 IoU 가 가장 높은 것."""
+def _candidates(A: BaseGeometry, legacy: bool = False, spiral: bool = True) -> list[tuple[str, list[np.ndarray]]]:
+    """한 층 단면의 경로 후보들 (이름, 폴리라인 목록)."""
     cands = []
     s_main = main_step()
     if not legacy:
@@ -273,6 +276,13 @@ def best_paths(A: BaseGeometry, legacy: bool = False, spiral: bool = True, both:
             extra.append(np.array([c - u * L / 2, c + u * L / 2]))
         if extra:
             cands.append((name0 + "+fill", P0 + extra))
+    return cands
+
+
+def best_paths(A: BaseGeometry, legacy: bool = False, spiral: bool = True, both: bool = False):
+    """후보 경로들 중 형상 기준(여유 포함)을 만족하는 것 가운데 예상 적층시간이 가장 짧은 것.
+    만족하는 후보가 없으면 IoU 가 가장 높은 것."""
+    cands = _candidates(A, legacy, spiral)
     # both=True: 후보를 한 번만 평가해 '나선 포함 최선'과 '고리만 최선'을 함께 돌려준다.
     # 포트폴리오는 두 경로 묶음을 다 쓰는데, 따로 두 번 계산하면 고리 후보를 두 번 평가하게 된다.
     best, best_ring = None, None
@@ -292,6 +302,92 @@ def best_paths(A: BaseGeometry, legacy: bool = False, spiral: bool = True, both:
     if both:
         return (best[1], best[2], best[3]), (best_ring[1], best_ring[2], best_ring[3])
     return best[1], best[2], best[3]
+
+
+# 전체 IoU 예산으로 층별 경로 고르기
+# 채점기의 전체 IoU 는 '층별 교집합 면적 합 ÷ 층별 합집합 면적 합'이다(층 높이가 같으므로).
+# 그래서 모든 층이 IOU_TARGET 을 넘길 필요 없이, 합계가 기준을 넘기면 된다. 얇은 벽처럼 비드 줄 수가
+# 정수로 끊기는 층(06 의 18mm 벽: 2줄이면 IoU 0.89, 3줄이면 0.99)은 짧은 경로를 쓰고, 그 부족분을
+# 여유 있는 층이 메운다. 층별 최저선(LAYER_IOU_MIN)은 채점기의 층별 기준보다 여유 있게 지킨다.
+GLOBAL_IOU = 0.92        # 전체 기준 0.90 + 여유 (configure 가 config 로 다시 맞춘다)
+LAYER_IOU_MIN = 0.85     # 층별 기준 0.80 + 여유
+GLOBAL_IOU_MARGIN = 0.02
+LAYER_IOU_MARGIN = 0.05
+
+
+def frontier(A: BaseGeometry, spiral: bool = True, both: bool = False):
+    """층 하나의 후보 중 '더 오래 걸리면 IoU 여유도 더 큰' 것만 남긴 목록 [(예상시간, 교집합, 합집합, 경로, IoU)].
+    층별 최저선·넘침 기준을 넘는 후보가 없으면 IoU 가 가장 높은 후보 하나만 둔다.
+    both=True 면 (나선 포함 목록, 고리만 목록) 두 개를 돌려준다."""
+    rows = []
+    for name, P in _candidates(A, spiral=spiral):
+        if not P:
+            continue
+        sc = score(A, P)
+        rows.append((name, est_time(sc), sc, P))
+
+    def pick(rs):
+        ok = [r for r in rs if r[2]["iou"] >= LAYER_IOU_MIN and r[2]["overfill"] <= OVERFILL_MAX]
+        if not ok:
+            r = max(rs, key=lambda r: r[2]["iou"])
+            return [(r[1], r[2]["inter"], r[2]["union"], r[3], r[2]["iou"])]
+        ok.sort(key=lambda r: (r[1], -r[2]["iou"]))
+        out, best_slack = [], -float("inf")
+        for _, t, sc, P in ok:
+            slack = sc["inter"] - GLOBAL_IOU * sc["union"]
+            if slack > best_slack + 1e-9:
+                out.append((t, sc["inter"], sc["union"], P, sc["iou"]))
+                best_slack = slack
+        return out
+
+    if both:
+        return pick(rows), pick([r for r in rows if not r[0].startswith("linked")])
+    return pick(rows)
+
+
+def select_global(fronts: dict) -> dict:
+    """층마다 frontier 하나씩 받아 전체 IoU ≥ GLOBAL_IOU 를 지키며 예상 적층시간 합이 가장 작게 고른다.
+
+    전체 IoU ≥ G  ⇔  Σ(교집합 − G·합집합) ≥ 0 이라 층별 '여유'의 합 문제가 된다. 모두 가장 빠른 후보에서
+    시작해, 여유가 모자라면 '늘어나는 시간당 여유가 가장 많이 느는' 층부터 한 단계씩 올린다.
+    돌려주는 값: {층: (경로, IoU, 여유)}  여유 = 교집합 − G·합집합 (스케줄러가 경로를 바꿀 때 예산을 지키는 데 쓴다)"""
+    import heapq
+    G = GLOBAL_IOU
+    cur = {k: 0 for k in fronts}
+    slack = sum(f[0][1] - G * f[0][2] for f in fronts.values())
+
+    def best_step(k):
+        f, i = fronts[k], cur[k]
+        s0, t0 = f[i][1] - G * f[i][2], f[i][0]
+        best = None
+        for j in range(i + 1, len(f)):
+            ds, dt = f[j][1] - G * f[j][2] - s0, f[j][0] - t0
+            if ds <= 0:
+                continue
+            ratio = ds / max(dt, 1e-9)
+            if best is None or ratio > best[0]:
+                best = (ratio, j, ds)
+        return best
+
+    heap = []
+    for k in sorted(fronts):
+        b = best_step(k)
+        if b:
+            heapq.heappush(heap, (-b[0], k, b[1], b[2]))
+    while slack < 0 and heap:
+        _, k, j, ds = heapq.heappop(heap)
+        if j <= cur[k]:
+            continue
+        cur[k] = j
+        slack += ds
+        b = best_step(k)
+        if b:
+            heapq.heappush(heap, (-b[0], k, b[1], b[2]))
+    out = {}
+    for k in fronts:
+        t, inter, union, P, iou = fronts[k][cur[k]]
+        out[k] = (P, iou, inter - G * union)
+    return out
 
 
 def linked(A: BaseGeometry, step: float | None = None, join: str = "mitre", simplify: float = 0.05) -> list[np.ndarray]:
