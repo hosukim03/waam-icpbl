@@ -452,7 +452,7 @@ def _place_layer(ctx, k, paths, z, zl, P, policy=None):
             if band_dir == "alt":            # 로봇마다도 반대로: 한 대가 바깥→안일 때 다른 대는 안→바깥
                 outward = outward != (o % 2 == 1)
         c_layer = np.mean(np.vstack([np.asarray(Q, float)[:, :2] for Q in paths]), axis=0)
-        for bi, b in enumerate(sorted(bands, reverse=outward)):
+        for bi, b in enumerate(sorted(bands, reverse=bool(outward))):   # o 가 numpy 정수면 numpy.bool 이 된다
             if sweep:                                    # 띠마다 방향을 번갈아(지그재그) 같은 회전 방향으로
                 seg = sweep_order(bands[b], cur, c_layer, +1 if bi % 2 == 0 else -1)
             else:

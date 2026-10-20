@@ -11,6 +11,7 @@
 - `v0/` 코드를 역할별로 나눴다: 제출에 쓰는 코드 9개는 `src/`, 평가·형상 생성·분석·그림은 `tools/`, RL·튜닝·예전 스케줄러는 `experiments/`, 기능 변경 전 백업(`*_pre_*`)과 옛 실행 스크립트는 `archive/`. 공개 6개 출력은 바이트 단위로 동일.
 
 ### Fixed
+- 채점기 requirements.lock 그대로(numpy 2.4.6) 설치한 환경에서 2대 엇갈림 나선 설정(`sp_r2c160m5a`, `sp_r2c160m5arp`)이 02·04에서 `TypeError: 'numpy.bool' object cannot be interpreted as an integer`로 죽던 문제. 로봇 번호가 numpy 정수인 층에서 진행 방향이 numpy.bool 이 되어 `sorted(reverse=...)`가 받지 못했다. `bool()`로 바꿔 넘긴다. 04가 27,321 s(다른 설정으로 대체) → 27,260 s(기록과 같음)로 돌아온다.
 - 구멍이 여러 개 뚫린 속찬 판(플랜지)에서 경로 후보의 빈틈 영역 도형이 깨져 교집합 계산이 실패하고, 설정 12개가 모두 죽어 생성 실패(0점)가 나던 문제. 실패하면 도형을 바로잡고 다시 계산한다(`toolpath._inter`). 공개 01·02·03·06 출력은 바이트 단위로 동일.
 - `export_waam.py`·`portfolio.py`에 상대 경로를 주면 하위 프로세스가 config.yaml을 찾지 못해 "모든 설정 실패"로 끝나던 문제(README 예시 명령이 그대로는 실패했다). 경로를 절대 경로로 바꿔 넘긴다.
 - 적층 Z가 config의 `tcp_z_reference`를 무시하고 항상 층 가운데(center)로 매겨지던 문제. `top` 형상이면 모든 적층이 1 mm 어긋나 입력 오류(0점)가 났다. 공개 01·06을 `top`으로 바꿔 PASS 확인, `center` 결과는 그대로.
