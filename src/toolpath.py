@@ -313,10 +313,13 @@ GLOBAL_IOU = 0.92        # 전체 기준 0.90 + 여유 (configure 가 config 로
 LAYER_IOU_MIN = 0.85     # 층별 기준 0.80 + 여유
 GLOBAL_IOU_MARGIN = 0.02
 LAYER_IOU_MARGIN = 0.05
-# 조각 하나당 준비 비용(s): 들어올림·이동·내림과 충돌 회피 대기. 아크 대기(ARC)를 뺀 뒤로 예상 시간에
-# 조각 수가 안 들어가서, 02 에서 비드 끝 둥근 면적으로 IoU 를 채우는 점 392개짜리 경로(955mm)가
-# 한 줄 중심선(1,978mm)보다 빠르다고 잘못 골랐다(makespan +17%). 0.3s 넘으면 걸러진다.
-PIECE_TIME = 1.0
+# 조각 하나당 준비 비용(s): 들어올림·내림 3mm 씩과 짧은 이동(163.5 mm/s 에서 약 0.1s).
+PIECE_TIME = 0.1
+# 조각 평균 길이가 비드 폭보다 짧은 후보는 뺀다. 아크 대기를 뺀 뒤로 예상 시간에 조각 수가 거의 안 들어가서,
+# 02 에서 비드 끝 둥근 면적으로 IoU 를 채우는 '점' 392개짜리 경로(평균 2.4mm, 955mm)를 한 줄 중심선
+# (1,978mm)보다 빠르다고 골랐다(makespan 1,405 → 1,642 s). 조각 비용을 1s 로 키워 막으면 01·03 에서
+# 이어 그린 경로 대신 긴 중심선을 골라 오히려 나빠졌다(01 864 → 918 s, 03 1,308 → 1,379 s).
+MIN_PIECE_LEN_RATIO = 1.0
 
 
 def frontier(A: BaseGeometry, spiral: bool = True, both: bool = False):
@@ -331,7 +334,8 @@ def frontier(A: BaseGeometry, spiral: bool = True, both: bool = False):
         rows.append((name, est_time(sc) + PIECE_TIME * sc["pieces"], sc, P))
 
     def pick(rs):
-        ok = [r for r in rs if r[2]["iou"] >= LAYER_IOU_MIN and r[2]["overfill"] <= OVERFILL_MAX]
+        ok = [r for r in rs if r[2]["iou"] >= LAYER_IOU_MIN and r[2]["overfill"] <= OVERFILL_MAX
+              and r[2]["length"] >= MIN_PIECE_LEN_RATIO * W * r[2]["pieces"]]
         if not ok:
             r = max(rs, key=lambda r: r[2]["iou"])
             return [(r[1], r[2]["inter"], r[2]["union"], r[3], r[2]["iou"])]
