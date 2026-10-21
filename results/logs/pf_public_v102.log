@@ -1,0 +1,7 @@
+pf_public_v102 01 [] PASS makespan=918.7 gen=6.4s coll=0 
+pf_public_v102 02 [] PASS makespan=1404.7 gen=12.2s coll=0 
+pf_public_v102 03 [] FAIL makespan=1413.4 gen=8.8s coll=0 Speed validation failed: 1 violating interval(s).
+pf_public_v102 04 [] PASS makespan=28875.9 gen=91.4s coll=0 
+pf_public_v102 05 [] PASS makespan=75706.8 gen=111.9s coll=0 
+pf_public_v102 06 [] PASS makespan=5315.3 gen=4.6s coll=0 
+pf_public_v102 완료 → C:\projects\waam\results\pf_public_v102.csv

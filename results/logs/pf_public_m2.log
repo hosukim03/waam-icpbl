@@ -1,0 +1,7 @@
+pf_public_m2 01 [] PASS makespan=864.0 gen=19.0s coll=0 
+pf_public_m2 02 [] PASS makespan=1374.6 gen=25.8s coll=0 
+pf_public_m2 03 [] PASS makespan=1304.1 gen=22.6s coll=0 
+pf_public_m2 04 [] PASS makespan=26723.8 gen=357.9s coll=0 
+pf_public_m2 05 [] PASS makespan=75706.8 gen=230.0s coll=0 
+pf_public_m2 06 [] PASS makespan=5315.3 gen=19.9s coll=0 
+pf_public_m2 완료 → C:\projects\waam\results\pf_public_m2.csv

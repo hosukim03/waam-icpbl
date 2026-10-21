@@ -1,0 +1,22 @@
+pf_check808_m2 01 [쉬움] PASS makespan=15036.0 gen=46.7s coll=0 
+pf_check808_m2 02 [쉬움] PASS makespan=3809.1 gen=11.5s coll=0 
+pf_check808_m2 03 [어려움] PASS makespan=2854.8 gen=30.0s coll=0 
+pf_check808_m2 04 [중간] PASS makespan=14930.3 gen=297.4s coll=0 
+pf_check808_m2 05 [어려움] PASS makespan=13824.6 gen=237.1s coll=0 
+pf_check808_m2 06 [어려움] PASS makespan=6238.2 gen=90.9s coll=0 
+pf_check808_m2 07 [중간] PASS makespan=3376.8 gen=26.1s coll=0 
+pf_check808_m2 08 [쉬움] PASS makespan=967.5 gen=12.5s coll=0 
+pf_check808_m2 09 [중간] PASS makespan=8512.4 gen=105.4s coll=0 
+pf_check808_m2 10 [중간] PASS makespan=26310.0 gen=4223.4s coll=0 
+pf_check808_m2 11 [쉬움] PASS makespan=224.7 gen=5.9s coll=0 
+pf_check808_m2 12 [쉬움] PASS makespan=1079.4 gen=19.3s coll=0 
+pf_check808_m2 13 [중간] PASS makespan=13231.8 gen=31.0s coll=0 
+pf_check808_m2 14 [중간] PASS makespan=1650.8 gen=9.6s coll=0 
+pf_check808_m2 15 [중간] PASS makespan=16285.3 gen=73.5s coll=0 
+pf_check808_m2 16 [중간] PASS makespan=1260.8 gen=8.7s coll=0 
+pf_check808_m2 17 [중간] FAIL makespan=25387.3 gen=196.6s coll=1 ARM_ENVELOPE: 1 event(s) detected; worst safety margin -0.738 mm.
+pf_check808_m2 18 [어려움] PASS makespan=2579.2 gen=7.9s coll=0 
+pf_check808_m2 19 [중간] PASS makespan=33864.6 gen=324.5s coll=0 
+pf_check808_m2 20 [어려움] PASS makespan=10617.9 gen=88.1s coll=0 
+pf_check808_m2 21 [중간] FAIL makespan=21211.9 gen=195.2s coll=1 ARM_ENVELOPE: 1 event(s) detected; worst safety margin -0.239 mm.
+pf_check808_m2 완료 → C:\projects\waam\results\pf_check808_m2.csv

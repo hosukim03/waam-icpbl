@@ -1,0 +1,7 @@
+pf_public_v102b 01 [] PASS makespan=918.7 gen=6.2s coll=0 
+pf_public_v102b 02 [] PASS makespan=1404.7 gen=12.1s coll=0 
+pf_public_v102b 03 [] PASS makespan=1413.4 gen=8.5s coll=0 
+pf_public_v102b 04 [] PASS makespan=28875.9 gen=736.2s coll=0 
+pf_public_v102b 05 [] PASS makespan=75706.8 gen=123.4s coll=0 
+pf_public_v102b 06 [] PASS makespan=5315.3 gen=6.2s coll=0 
+pf_public_v102b 완료 → C:\projects\waam\results\pf_public_v102b.csv

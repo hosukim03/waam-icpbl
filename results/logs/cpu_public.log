@@ -1,0 +1,7 @@
+cpu_public 01 wall=16.0s cpu=68.4s (4.3배) 동시 프로세스 최대 38
+cpu_public 02 wall=26.6s cpu=158.0s (5.9배) 동시 프로세스 최대 38
+cpu_public 03 wall=20.7s cpu=109.7s (5.3배) 동시 프로세스 최대 38
+cpu_public 04 wall=360.0s cpu=1814.0s (5.0배) 동시 프로세스 최대 38
+cpu_public 05 wall=253.4s cpu=1891.6s (7.5배) 동시 프로세스 최대 38
+cpu_public 06 wall=20.7s cpu=115.0s (5.6배) 동시 프로세스 최대 38
+cpu_public 합계 wall=697.4s cpu=4156.7s (6.0배) → C:\projects\waam\results\cpu_public.csv

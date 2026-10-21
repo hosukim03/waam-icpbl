@@ -1,0 +1,7 @@
+﻿job,level,desc,status,makespan_s,gen_s,iou,collisions,reasons
+01,,,PASS,918.7,6.4,0.997,0,
+02,,,PASS,1404.7,12.2,0.997,0,
+03,,,FAIL,1413.4,8.8,0.987,0,Speed validation failed: 1 violating interval(s).
+04,,,PASS,28875.9,91.4,1.000,0,
+05,,,PASS,75706.8,111.9,0.999,0,
+06,,,PASS,5315.3,4.6,0.996,0,
