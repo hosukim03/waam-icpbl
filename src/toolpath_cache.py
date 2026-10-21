@@ -66,9 +66,9 @@ _REUSE = False
 
 
 def _ok(A, paths):
-    from toolpath import score, IOU_TARGET, OVERFILL_MAX
+    from toolpath import score, meets
     sc = score(A, paths)
-    return sc["iou"] >= IOU_TARGET and sc["overfill"] <= OVERFILL_MAX, sc["iou"]
+    return meets(sc), sc["iou"]
 
 
 def _work_block(ks):

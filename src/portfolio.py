@@ -17,6 +17,7 @@ usage:
 from __future__ import annotations
 
 import argparse
+import json
 import csv
 import multiprocessing as mp
 import os
@@ -89,6 +90,31 @@ VARIANTS = {
 DEFAULT = ["sp_r3c220balm5", "sp_r1c160", "r3c160m5", "r3c220bal", "r3tuned", "r1c160",
            "sp_r2c160m5a", "sp_r3c220balm5rp", "sp_r1c160rp", "r2c160m5rp", "sp_r2c160m5arp", "r1c160rp"]
 
+# ---------------------------------------------------------------- 형상을 보고 돌릴 설정 고르기
+# 설정 12개를 전부 돌리면 코어가 많은 컴퓨터에서만 빠르다(총 계산량은 시계 시간의 약 6배).
+# 형상 특징(features.py, 1초 안팎)을 보고 필요한 설정만 돌려 총 계산량을 줄인다.
+# 근거(2026-10-02, 공개 6 + check808 21개, 가지치기 없이 설정별 makespan 을 전부 구한 표):
+#   12개 전부 대비 makespan +0.09%, 설정 계산량 34%, 가장 손해 본 형상 +1.2%.
+# 두 로봇이 동시에 설 수 있는 조합이 없으면(pair_max≈0) 한 번에 한 대만 적층할 수 있는 형상이다.
+PAIR_EPS = 0.01
+SOLO = ["sp_r1c160", "sp_r1c160rp"]                       # 한 대로 다 닿는다 → 1대 설정
+TURN = ["sp_r2c160m5arp", "sp_r2c160m5a", "sp_r3c220balm5rp"]   # 한 대로는 안 닿는다 → 번갈아 적층
+MULTI = ["sp_r2c160m5a", "sp_r3c220balm5rp", "r3tuned", "sp_r1c160"]   # 여러 대가 나눠 적층
+
+
+def select_variants(job: Path) -> tuple[list[str], dict]:
+    """형상 특징으로 돌릴 설정 목록을 정한다. 특징 계산이 실패하면 여러 대 설정으로 간다."""
+    c = subprocess.run([str(VPY), str(ROOT / "src" / "features.py"), str(job)],
+                       capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=ROOT / "WAAM_Validator")
+    try:
+        f = json.loads(c.stdout.strip().splitlines()[-1])
+    except Exception:
+        return list(MULTI), {}
+    if f["pair_max"] < PAIR_EPS:
+        return list(SOLO if f["reach1"] >= 0.999 else TURN), f
+    return list(MULTI), f
+
+
 # 코어가 모자랄 때 남길 순서(36개 형상에서 '한 개씩 더했을 때 합계가 가장 줄어드는' 순서로 계산).
 # 2개면 전부 대비 +1.18%, 3개 +0.50%, 4개 +0.26%, 5개 +0.10% 수준이다.
 PRIORITY = list(DEFAULT)
@@ -147,7 +173,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("job")
     ap.add_argument("out")
-    ap.add_argument("--variants", default=",".join(DEFAULT))
+    ap.add_argument("--variants", default=None,
+                    help="돌릴 설정을 직접 지정(쉼표로 구분). 생략하면 형상 특징으로 고른다")
+    ap.add_argument("--full", action="store_true",
+                    help="형상을 보고 고르지 않고 기본 설정 12개를 전부 돌린다(예전 방식)")
     ap.add_argument("--workers", type=int, default=0, help="동시 실행 개수 (0 = 설정 수와 코어 수 중 작은 값)")
     ap.add_argument("--all", action="store_true",
                     help="코어가 모자라도 설정을 줄이지 않고 전부 실행(순차 대기)")
@@ -158,7 +187,14 @@ def main():
                     help="층별 경로를 설정마다 따로 계산(예전 방식)")
     a = ap.parse_args()
     job, out = Path(a.job).resolve(), Path(a.out).resolve()   # 하위 프로세스는 채점기 폴더에서 실행된다
-    names = [v for v in a.variants.split(",") if v in VARIANTS]
+    if a.variants:
+        names = [v for v in a.variants.split(",") if v in VARIANTS]
+    elif a.full:
+        names = list(DEFAULT)
+    else:
+        names, feat = select_variants(job)
+        print(f"  형상 특징 {{{', '.join(f'{k}={v:.3g}' for k, v in feat.items())}}} → 설정 {len(names)}개: {','.join(names)}",
+              flush=True)
     work = Path(str(out) + "_variants")
     work.mkdir(parents=True, exist_ok=True)
     nw = a.workers or min(len(names), mp.cpu_count())

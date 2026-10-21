@@ -28,13 +28,19 @@ def fast_speed(cfg, v: float) -> float:
 def configure(cfg, arc: bool = False) -> None:
     """config 의 비드 폭·버퍼 해상도·적층 속도·아크 시간으로 경로 생성 상수를 맞춘다.
     아크 켜기·끄기 대기는 채점기가 검사하지 않으므로 arc=True 일 때만 넣는다."""
-    global W, R, QUAD, V_DEP, ARC
+    global W, R, QUAD, V_DEP, ARC, IOU_TARGET, COVERAGE_MIN, OVERFILL_MAX
     pr = cfg.process
     W = float(pr.bead_width_mm)
     R = W / 2.0
     QUAD = int(cfg.shape_validation.polygon_buffer_resolution)
     V_DEP = fast_speed(cfg, pr.deposition_speed_mm_s)
     ARC = float((pr.arc_on_time_s or 0.0) + (pr.arc_off_time_s or 0.0)) if arc else 0.0
+    # 층별 형상 목표 = config 의 합격 기준 + 여유. 채점기는 '모든 층' IoU 와 전체 IoU·Coverage·Overfill 을 보는데,
+    # 층마다 IoU 가 목표 이상이면 전체 IoU(층 체적 가중)도 목표 이상이고 IoU ≤ Coverage 이므로 Coverage 도 따라온다.
+    sv = cfg.shape_validation
+    IOU_TARGET = max(float(sv.minimum_layer_iou), float(sv.minimum_overall_iou)) + IOU_MARGIN
+    COVERAGE_MIN = float(sv.minimum_overall_coverage) + IOU_MARGIN
+    OVERFILL_MAX = max(0.0, float(sv.maximum_overall_overfill_ratio) - OVERFILL_MARGIN)
 
 
 def main_step() -> float:
@@ -194,12 +200,33 @@ def deposit(paths: list[np.ndarray]) -> BaseGeometry:
         return union_all([shapely.make_valid(b) for b in B], grid_size=1e-6)
 
 
+_GEOS = shapely.errors.GEOSException
+
+
+def _areal(g: BaseGeometry) -> BaseGeometry:
+    """도형을 바로잡고 면(Polygon)만 남긴다. make_valid 는 면과 선이 섞인 묶음을 돌려줄 수 있는데,
+    그대로 겹침 계산에 넣으면 'mixed-dimension' 오류가 난다."""
+    ps = _polys(shapely.make_valid(g))
+    return union_all(ps) if ps else Polygon()
+
+
 def _inter(a: BaseGeometry, b: BaseGeometry) -> BaseGeometry:
-    """교집합. 빈틈 영역처럼 버퍼를 거친 도형이 살짝 깨져 GEOS 가 실패하면 도형을 바로잡고 격자에 맞춰 다시 계산한다."""
+    """교집합. 빈틈 영역처럼 버퍼를 거친 도형이 살짝 깨져 GEOS 가 실패하면 면만 남겨 바로잡고
+    격자에 맞춰 다시 계산한다. 끝내 안 되면 빈 도형(그 보강은 건너뛴다)."""
     try:
         return a.intersection(b)
-    except shapely.errors.GEOSException:
-        return shapely.intersection(shapely.make_valid(a), shapely.make_valid(b), grid_size=1e-6)
+    except _GEOS:
+        pass
+    try:
+        a2, b2 = _areal(a), _areal(b)
+        for grid in (1e-6, 1e-4, 1e-2):
+            try:
+                return shapely.intersection(a2, b2, grid_size=grid)
+            except _GEOS:
+                continue
+    except _GEOS:
+        pass
+    return Polygon()
 
 
 def score(A: BaseGeometry, paths: list[np.ndarray]) -> dict:
@@ -215,8 +242,18 @@ def score(A: BaseGeometry, paths: list[np.ndarray]) -> dict:
 
 
 GAP_SPACING = 3.0      # 빈틈 중심선용 경계 표본 간격(크면 Voronoi 가 빨라진다)
-IOU_TARGET = 0.92      # 층별 기준 0.80 / 전체 0.90 보다 여유 있게
-OVERFILL_MAX = 0.25    # 기준 0.30 보다 여유 있게
+# 층마다 경로를 고를 때의 형상 목표. 아래는 채점기 v1.0.2 기준(층·전체 IoU 98%, Coverage 98%, Overfill 3%)에
+# 여유를 더한 기본값이고, configure(cfg) 가 작업 config 의 기준으로 다시 맞춘다.
+IOU_MARGIN = 0.002       # IoU·Coverage 는 기준보다 이만큼 높게
+OVERFILL_MARGIN = 0.005  # Overfill 은 기준보다 이만큼 낮게
+IOU_TARGET = 0.982
+COVERAGE_MIN = 0.982
+OVERFILL_MAX = 0.025
+
+
+def meets(sc: dict) -> bool:
+    """후보 경로의 자체 점수가 층별 형상 목표를 모두 넘는가."""
+    return sc["iou"] >= IOU_TARGET and sc["coverage"] >= COVERAGE_MIN and sc["overfill"] <= OVERFILL_MAX
 
 
 def best_paths(A: BaseGeometry, legacy: bool = False, spiral: bool = True, both: bool = False):
@@ -229,10 +266,13 @@ def best_paths(A: BaseGeometry, legacy: bool = False, spiral: bool = True, both:
         if inner.area < 0.5 * A.area:                 # 얇은 벽이 대부분인 층
             cands.append(("medial", medial(A)))
         else:                                         # 두꺼운 영역 + 남은 얇은 틈은 중심선으로 보강
-            base = concentric(A, s_main, join="mitre")
-            gap = A.difference(deposit(base)).buffer(-0.5).buffer(0.5)
-            if gap.area > 4.0:
-                cands.append((f"mitre{s_main}+medial", base + medial(_inter(gap.buffer(R * 0.5), A), spacing=GAP_SPACING)))
+            try:
+                base = concentric(A, s_main, join="mitre")
+                gap = A.difference(deposit(base)).buffer(-0.5).buffer(0.5)
+                if gap.area > 4.0:
+                    cands.append((f"mitre{s_main}+medial", base + medial(_inter(gap.buffer(R * 0.5), A), spacing=GAP_SPACING)))
+            except _GEOS:
+                pass                                  # 도형 연산이 실패한 후보는 버리고 나머지에서 고른다
     for s in tuple(W * r for r in STEP_RATIOS):
         rings = {jn: concentric(A, s, join=jn) for jn in ("round", "mitre")}
         cands.append((f"concentric{s}", rings["round"]))
@@ -243,22 +283,31 @@ def best_paths(A: BaseGeometry, legacy: bool = False, spiral: bool = True, both:
         for jn in (("round", "mitre") if spiral and s >= s_main else ()):
             P = link_rings(rings[jn], s)
             cands.append((f"linked{s}{jn}", P))
-            gap = A.difference(deposit(P)).buffer(-0.5).buffer(0.5)
-            if gap.area > 4.0:
-                cands.append((f"linked{s}{jn}+medial", P + medial(_inter(gap.buffer(R * 0.5), A), spacing=GAP_SPACING)))
+            try:
+                gap = A.difference(deposit(P)).buffer(-0.5).buffer(0.5)
+                if gap.area > 4.0:
+                    cands.append((f"linked{s}{jn}+medial", P + medial(_inter(gap.buffer(R * 0.5), A), spacing=GAP_SPACING)))
+            except _GEOS:
+                pass
     for dl in (0.15, 0.3, 0.5):
         cands.append((f"sliver{dl}", sliver(A, dl)))
     # 두꺼운 영역은 동심원, 거기서 남은 얇은 틈은 sliver 로 보강
-    base = concentric(A, s_main)
-    gap = A.difference(deposit(base)).buffer(0)
-    if gap.area > 1.0:
-        extra = [p for p in sliver(A, 0.3) if _inter(LineString(p).buffer(R), gap).area > 0.5 * LineString(p).length]
-        cands.append((f"concentric{s_main}+sliver", base + extra))
+    try:
+        base = concentric(A, s_main)
+        gap = A.difference(deposit(base)).buffer(0)
+        if gap.area > 1.0:
+            extra = [p for p in sliver(A, 0.3) if _inter(LineString(p).buffer(R), gap).area > 0.5 * LineString(p).length]
+            cands.append((f"concentric{s_main}+sliver", base + extra))
+    except _GEOS:
+        pass
     # 모서리 보강: 남은 빈틈의 각 조각 중심선을 짧게 추가
     for name0, P0 in list(cands):
         if not name0.startswith("mitre"):
             continue
-        gap = A.difference(deposit(P0)).buffer(-0.5).buffer(0.5)
+        try:
+            gap = A.difference(deposit(P0)).buffer(-0.5).buffer(0.5)
+        except _GEOS:
+            continue
         extra = []
         for g in _polys(gap):
             if g.area < 4.0:
@@ -279,11 +328,14 @@ def best_paths(A: BaseGeometry, legacy: bool = False, spiral: bool = True, both:
     for name, P in cands:
         if not P:
             continue
-        sc = score(A, P)
+        try:
+            sc = score(A, P)
+        except _GEOS:
+            continue
         if legacy:
             key = (sc["overfill"] <= 0.30, round(sc["iou"], 3), -sc["length"])
         else:
-            ok = sc["iou"] >= IOU_TARGET and sc["overfill"] <= OVERFILL_MAX
+            ok = meets(sc)
             key = (ok, -est_time(sc) if ok else sc["iou"])
         if best is None or key > best[0]:
             best = (key, P, sc, name)

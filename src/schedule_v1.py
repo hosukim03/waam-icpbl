@@ -26,6 +26,7 @@ from toolpath import best_paths
 
 # 이동 속도는 config 의 travel_speed_mm_s(150) 규격값. 들어올림은 층 높이 2mm 를 넘기면 되므로 3mm.
 TRAVEL_V, LIFT, PARK_R = 150.0, 3.0, 900.0
+T_PAD_S, T_PAD_BELOW_MM = 2e-6, 1.0     # 짧은 이동의 시각 반올림 여유(travel 참고)
 H_STRIP = 135.0          # 띠 절반폭 -> 동시 작업 시 팔 간 최소 270mm
 MIN_ZONE_PIECE = 40.0    # 이보다 짧은 영역 조각은 아크 비용 때문에 순차로 돌림
 
@@ -126,7 +127,10 @@ class Robot:
         if d < 0.01:
             return
         self._row(self.t, self.pos, "T")
-        self.t += d / TRAVEL_V
+        # CSV 에는 시각을 소수 6자리(1µs)로 적는다. 0.01mm 남짓한 아주 짧은 이동은 반올림으로 시간이 1µs 짧아져도
+        # 채점기가 계산한 속도가 한계(기준의 +10%)를 넘는다(공개 03: 0.011mm 이동이 165.07 > 165 mm/s 로 FAIL).
+        # 짧은 이동에만 2µs 를 더해 반올림 뒤에도 실제 이동 속도 이하로 기록되게 한다(1mm 이상은 오차 0.02% 이하).
+        self.t += d / TRAVEL_V + (T_PAD_S if d < T_PAD_BELOW_MM else 0.0)
         self.pos = q
         self._row(self.t, self.pos, "T")
 

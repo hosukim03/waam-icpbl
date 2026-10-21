@@ -31,7 +31,7 @@ from waam_validator.shape.target import load_target_mesh, slice_target_layers
 from schedule_v1 import Robot, LIFT, TRAVEL_V, order_pieces, plen, split
 import schedule_v1 as v1
 from schedule_v2 import chunkify
-from toolpath import best_paths, score as _tp_score, IOU_TARGET as _IOU_T, OVERFILL_MAX as _OVER_M
+from toolpath import best_paths, score as _tp_score, meets as _tp_meets
 from balance import SectorLabeler, IslandLabeler
 import balance
 import toolpath
@@ -692,7 +692,7 @@ def run(job: Path, opts, policy=None):
             # 아래층 경로가 이 층 형상 기준도 통과하면 그대로 쓴다(점수만 재므로 싸다). 결과가 경로의
             # 사소한 차이에 크게 흔들려서, 새로 고른 경로 쪽 설정과 함께 돌리면 형상마다 좋은 쪽이 뽑힌다.
             sc_prev = _tp_score(A, prev_paths)
-            if sc_prev["iou"] >= _IOU_T and sc_prev["overfill"] <= _OVER_M:
+            if _tp_meets(sc_prev):          # 목표는 apply_config 가 config 로 맞춘 값(호출 시점에 읽는다)
                 paths, iou_k = prev_paths, sc_prev["iou"]
         prev_paths = paths
         min_iou = min(min_iou, iou_k)
