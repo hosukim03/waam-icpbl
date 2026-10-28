@@ -1,0 +1,25 @@
+# WAAM 대시보드(dashboard/app.py) 모양. 색은 dashboard/theme.py 의 팔레트와 같다(밝은·어두운 화면 각각).
+# 화면 모드는 컴퓨터 설정을 따르고, 대시보드 오른쪽 위 메뉴 → Settings 에서 바꿀 수 있다.
+[theme]
+primaryColor = "#2a78d6"
+
+[theme.light]
+primaryColor = "#2a78d6"
+backgroundColor = "#f9f9f7"
+secondaryBackgroundColor = "#f0efec"
+textColor = "#0b0b0b"
+
+[theme.dark]
+primaryColor = "#3987e5"
+backgroundColor = "#0d0d0d"
+secondaryBackgroundColor = "#1a1a19"
+textColor = "#f0efec"
+
+[server]
+address = "localhost"     # 이 컴퓨터에서만 열린다(같은 와이파이의 다른 기기에서는 안 보임)
+
+[client]
+toolbarMode = "minimal"   # 오른쪽 위 'Deploy' 같은 개발 단추를 숨긴다
+
+[browser]
+gatherUsageStats = false

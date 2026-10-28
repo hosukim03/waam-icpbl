@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="48" viewBox="0 0 300 48">
+  <rect x="0" y="6" width="36" height="36" rx="9" fill="#2a78d6"/>
+  <path d="M8 31 L13.5 17 L18 27 L22.5 17 L28 31" stroke="#ffffff" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="48" y="32" font-family="Pretendard, 'Segoe UI', 'Malgun Gothic', sans-serif" font-size="21" font-weight="700" fill="#2a78d6">WAAM 개발 대시보드</text>
+</svg>
