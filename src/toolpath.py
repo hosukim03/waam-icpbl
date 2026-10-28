@@ -83,15 +83,39 @@ def sliver(A: BaseGeometry, delta: float, simplify: float = 0.05) -> list[np.nda
     return _rings(inner, simplify)
 
 
-def medial(A: BaseGeometry, spacing: float = MEDIAL_SPACING, min_clear: float = 3.0, simplify: float = 0.1) -> list[np.ndarray]:
+FAST_VORONOI = True    # Voronoi 모서리를 칸 경계에서 모은다(아래 _voronoi_edges). False 면 예전 GEOS only_edges
+
+
+def _voronoi_edges(pts: np.ndarray, A: BaseGeometry) -> np.ndarray:
+    """경계 표본점의 Voronoi 모서리(선분 배열). GEOS 의 only_edges=True 는 칸 경계를 모두 겹쳐 놓고 잘라 내느라,
+    둥근 경계처럼 점이 원 위에 고르게 놓이면 매우 느리다(점 2,500개에 0.5초, 원 두 개 위 점이면 3.5초).
+    칸(polygon)으로 받아 칸 경계 선분을 한 번씩만 모으면 4분의 1 안팎 시간이다. 남는 선분 집합은 같고
+    (공개 형상 층에서 확인) 순서만 다르다. 순서는 좌표 사전순으로 고정한다."""
+    cells = shapely.get_parts(shapely.voronoi_polygons(MultiPoint(pts), extend_to=A))
+    xy, idx = shapely.get_coordinates(shapely.get_exterior_ring(cells), return_index=True)
+    same = idx[:-1] == idx[1:]
+    S = np.hstack([xy[:-1][same], xy[1:][same]])
+    sw = (S[:, 0] > S[:, 2]) | ((S[:, 0] == S[:, 2]) & (S[:, 1] > S[:, 3]))
+    S[sw] = S[sw][:, [2, 3, 0, 1]]
+    S = np.unique(S, axis=0)
+    S = S[(S[:, 0] != S[:, 2]) | (S[:, 1] != S[:, 3])]
+    return shapely.linestrings(S.reshape(-1, 2, 2))
+
+
+def medial(A: BaseGeometry, spacing: float = MEDIAL_SPACING, min_clear: float = 3.0, simplify: float = 0.1,
+           prune: float | None = None) -> list[np.ndarray]:
     """얇은 벽용 진짜 중심선: 경계점 Voronoi 모서리 중 벽 안쪽이고 경계에서 min_clear 이상 떨어진 것.
-    교차점을 지나며 이어 그을 수 있게 trail(한붓그리기 조각) 단위로 묶어 아크 on/off 횟수를 줄인다."""
+    교차점을 지나며 이어 그을 수 있게 trail(한붓그리기 조각) 단위로 묶어 아크 on/off 횟수를 줄인다.
+    prune: 이보다 짧은 막다른 잔가지를 지운다(기본 R)."""
     if A.is_empty:
         return []
     pts = shapely.get_coordinates(shapely.segmentize(A.boundary, spacing))
     if len(pts) < 4:
         return []
-    edges = shapely.get_parts(shapely.voronoi_polygons(MultiPoint(pts), only_edges=True, extend_to=A))
+    if FAST_VORONOI:
+        edges = _voronoi_edges(pts, A)
+    else:
+        edges = shapely.get_parts(shapely.voronoi_polygons(MultiPoint(pts), only_edges=True, extend_to=A))
     if len(edges) == 0:
         return []
     shapely.prepare(A)
@@ -102,14 +126,15 @@ def medial(A: BaseGeometry, spacing: float = MEDIAL_SPACING, min_clear: float = 
     bnd = A.boundary
     shapely.prepare(bnd)
     ends = shapely.get_coordinates(edges).reshape(-1, 2, 2)
-    d0 = shapely.distance(shapely.points(ends[:, 0]), bnd)
-    d1 = shapely.distance(shapely.points(ends[:, 1]), bnd)
-    edges = edges[(d0 >= min_clear) & (d1 >= min_clear)]
+    # 모서리 끝점은 이웃 모서리와 겹친다(Voronoi 꼭짓점 하나에 모서리 셋). 서로 다른 점만 한 번씩 잰다(값은 같다).
+    V, inv = np.unique(ends.reshape(-1, 2), axis=0, return_inverse=True)
+    far = shapely.distance(shapely.points(V), bnd) >= min_clear
+    edges = edges[far[inv.reshape(-1)].reshape(-1, 2).all(axis=1)]
     if len(edges) == 0:
         return []
     merged = shapely.line_merge(union_all(edges))
     lines = [np.asarray(g.coords)[:, :2] for g in shapely.get_parts(merged) if g.length > 1e-6]
-    lines = _prune_spurs(lines, max_len=R)
+    lines = _prune_spurs(lines, max_len=R if prune is None else prune)
     return _trails(lines, simplify)
 
 
@@ -189,10 +214,18 @@ def est_time(sc: dict, v_dep: float | None = None, arc: float | None = None) -> 
     return sc["length"] / v_dep + arc * sc["pieces"]
 
 
+def _simple(p: np.ndarray) -> BaseGeometry:
+    """경로 한 조각을 부풀리기 좋은 선으로. 채점기는 선분마다 따로 부풀려 합치는데, 자기 자신과 엇갈리는 선(고리를
+    이어 붙인 나선 등)을 GEOS 로 통째 부풀리면 넓이를 크게 잡는다(다른 방식 형상 novel1027 #15 41층: 통째 11,553 mm²,
+    선분마다 11,030 mm² → 층 IoU 99.4% 로 알고 골랐는데 채점기는 95.2%). 엇갈리는 점에서 끊으면 채점기와 같다."""
+    L = LineString(p)
+    return L if L.is_simple else shapely.node(L)
+
+
 def deposit(paths: list[np.ndarray]) -> BaseGeometry:
     if not paths:
         return Polygon()
-    B = [LineString(p).buffer(R, quad_segs=QUAD, cap_style="round", join_style="round") for p in paths]
+    B = [_simple(p).buffer(R, quad_segs=QUAD, cap_style="round", join_style="round") for p in paths]
     try:
         return union_all(B)
     except shapely.errors.GEOSException:
@@ -232,7 +265,7 @@ def _inter(a: BaseGeometry, b: BaseGeometry) -> BaseGeometry:
 def score(A: BaseGeometry, paths: list[np.ndarray]) -> dict:
     Dp = deposit(paths)
     inter = A.intersection(Dp).area
-    union = A.union(Dp).area
+    union = A.area + Dp.area - inter         # 합집합 넓이(도형 연산 한 번을 덧셈으로, 값은 소수 12자리 안에서 같다)
     return {"iou": inter / union if union else 0.0,
             "coverage": inter / A.area if A.area else 0.0,
             "overfill": (Dp.area - inter) / A.area if A.area else 0.0,
@@ -256,9 +289,323 @@ def meets(sc: dict) -> bool:
     return sc["iou"] >= IOU_TARGET and sc["coverage"] >= COVERAGE_MIN and sc["overfill"] <= OVERFILL_MAX
 
 
+def _est(P: list[np.ndarray]) -> float:
+    """후보의 예상 적층시간. score() 를 거친 est_time 과 같은 계산(같은 값)이다."""
+    return est_time({"length": float(sum(LineString(p).length for p in P)), "pieces": len(P)})
+
+
+def _fill_extra(A: BaseGeometry, P0: list[np.ndarray]) -> list[np.ndarray] | None:
+    """모서리 보강: P0 가 남긴 빈틈 조각마다 중심선을 짧게 하나씩. 빈틈 계산이 실패하면 None."""
+    try:
+        gap = A.difference(deposit(P0)).buffer(-0.5).buffer(0.5)
+    except _GEOS:
+        return None
+    extra = []
+    for g in _polys(gap):
+        if g.area < 4.0:
+            continue
+        c = np.asarray(g.centroid.coords)[0]
+        mrr = g.minimum_rotated_rectangle
+        xy = np.asarray(mrr.exterior.coords)[:4]
+        e1, e2 = xy[1] - xy[0], xy[2] - xy[1]
+        ax = e1 if np.linalg.norm(e1) >= np.linalg.norm(e2) else e2
+        L = max(np.linalg.norm(ax) - W, 0.6)
+        u = ax / (np.linalg.norm(ax) + 1e-12)
+        extra.append(np.array([c - u * L / 2, c + u * L / 2]))
+    return extra
+
+
+def _gap_medial(A: BaseGeometry, P: list[np.ndarray], min_clear: float = 3.0) -> list[np.ndarray] | None:
+    """P 가 남긴 얇은 빈틈을 중심선으로 보강한 후보. 빈틈이 작거나 도형 연산이 실패하면 None."""
+    try:
+        gap = A.difference(deposit(P)).buffer(-0.5).buffer(0.5)
+        if gap.area > 4.0:
+            return P + medial(_inter(gap.buffer(R * 0.5), A), spacing=GAP_SPACING, min_clear=min_clear)
+    except _GEOS:
+        pass
+    return None
+
+
+# 기준을 넘는 후보가 하나도 없는 층에서만 더 만드는 후보: 빈틈 중심선의 '경계에서 떨어진 거리' 기준을 3 → 2 mm 로
+# 낮춘다. 두께 16~18 mm 벽처럼 두 비드 사이에 폭 2 mm 이하 띠가 남으면 그 띠를 넓힌 영역의 중심선이 경계에서
+# 3 mm 를 못 띄워 전부 버려졌다(연습 형상 16 맨 위 층: IoU 94.0% → 99.8%). 1 mm 로 낮추면 각진 모서리마다
+# 잔가지가 생겨 넘침이 커진다(톱니바퀴 형상 IoU 97.8% → 85.3%).
+RESCUE_CLEAR = 2.0
+THIN_MIN_AREA = 1.0    # 가는 틈 보강(_gap_thin)에서 이보다 작은 틈 조각(mm²)은 버린다
+
+
+def _gap_thin(A: BaseGeometry, P: list[np.ndarray], min_clear: float = RESCUE_CLEAR) -> list[np.ndarray] | None:
+    """P 가 남긴 빈틈을 폭 1 mm 보다 가는 틈까지 중심선으로 메운 후보. _gap_medial 은 빈틈에서 폭 1 mm 보다 가는 틈을
+    지우고(buffer(-0.5).buffer(0.5)) 메우는데, 두께가 비드 폭의 배수보다 조금 두꺼운 벽은 가운데에 그런 틈이 길게
+    남아 그것만으로 층 IoU 가 기준 아래로 떨어진다(벽 16.6 mm = 비드 2줄 + 0.6 mm 틈, 다른 방식 형상 novel1027 #08).
+    목표 단면 테두리를 따라 생기는 얇은 계산 오차 띠는 R/2 부풀려도 단면 안쪽 폭이 R/2 남짓이라 min_clear 에 걸러진다."""
+    try:
+        gap = union_all([g for g in _polys(A.difference(deposit(P))) if g.area >= THIN_MIN_AREA])
+        if gap.area > 4.0:
+            return P + medial(_inter(gap.buffer(R * 0.5), A), spacing=GAP_SPACING, min_clear=min_clear)
+    except _GEOS:
+        pass
+    return None
+
+
+ADAPT_OVERLAP = 0.05   # adaptive: 이웃 고리 비드가 겹치는 폭(mm). 0 이면 맞닿은 자리에 계산 오차로 머리카락 같은 틈이 남는다
+ADAPT_SEG = 4.0        # adaptive: 남은 띠의 가운데 선을 이 길이(mm) 조각으로 나눠 조각마다 이득을 따진다
+
+
+ADAPT_EASY = 0.02      # adaptive: 넘치는 넓이가 비드 넓이의 이 비율 이하인 조각은 바로 쓴다(나머지는 하나씩 따진다).
+                       # 0.3 으로 두면 볼록 모서리로 뻗는 잔가지(넘침 20–30%)까지 바로 써서 벌집(공개 01) 층 IoU 가 97.8%
+
+
+def _beneficial(lines: list[np.ndarray], U: BaseGeometry, A: BaseGeometry) -> list[np.ndarray]:
+    """선을 ADAPT_SEG 조각으로 나눠, 비드로 덮었을 때 새로 덮는 넓이(U 안)가 단면 밖으로 넘치는 넓이보다 큰 조각만
+    남겨 다시 잇는다(층 IoU 에 이득인 조각만). 넘침이 적은 조각(비드 넓이의 ADAPT_EASY 이하: 테두리에서 R 이상
+    떨어진 조각, 비드보다 조금 얇은 가지의 가운데 선)은 바로 쓰고, 넘침이 큰 조각(볼록 모서리·가지 끝으로 뻗는
+    잔가지)은 앞에서 쓴 조각이 덮은 곳을 뺀 '정말 새로 덮는 넓이'로 하나씩 따진다. 조각마다 따로 재면 옆 조각이
+    이미 덮는 곳까지 이득으로 세어, 고리가 없는 얇은 벽(U = 단면 전체)에서 모서리마다 잔가지가 남는다."""
+    S = []
+    for ln in lines:
+        c = shapely.get_coordinates(shapely.segmentize(LineString(ln), ADAPT_SEG))
+        S += [c[i:i + 2] for i in range(len(c) - 1) if np.any(c[i] != c[i + 1])]
+    if not S:
+        return []
+    segs = shapely.linestrings(np.asarray(S))
+    B = shapely.buffer(segs, R, quad_segs=QUAD)
+    over = np.zeros(len(segs))
+    bnd = A.boundary
+    shapely.prepare(bnd)
+    near = np.nonzero(shapely.distance(segs, bnd) < R)[0]
+    if len(near):
+        over[near] = shapely.area(shapely.difference(B[near], A))
+    easy = over <= ADAPT_EASY * shapely.area(B)
+    gain = np.full(len(segs), np.inf)                 # 테두리에서 R 이상 떨어진 조각: 남은 띠의 가운데 선이라 바로 쓴다
+    chk = easy.copy()
+    chk[np.setdiff1d(np.arange(len(segs)), near)] = False
+    gain[chk] = shapely.area(shapely.intersection(B[chk], U))
+    keep = easy & (gain > 0.25)
+    hard = np.nonzero(~easy)[0]
+    if len(hard):
+        U2 = U.difference(union_all(B[keep])) if keep.any() else U
+        g0 = shapely.area(shapely.intersection(B[hard], U2))
+        for i in hard[np.argsort(-(g0 - over[hard]))]:            # 이득이 클 것 같은 조각부터
+            if U2.is_empty:
+                break
+            g = U2.intersection(B[i]).area
+            if g > max(over[i], 0.25):
+                keep[i] = True
+                U2 = U2.difference(B[i])
+    kept = segs[keep]
+    if len(kept) == 0:
+        return []
+    merged = shapely.line_merge(union_all(kept))
+    return _trails([np.asarray(g.coords)[:, :2] for g in shapely.get_parts(merged) if g.length > 1e-6], 0.05)
+
+
+def adaptive(A: BaseGeometry, simplify: float = 0.05) -> list[np.ndarray]:
+    """벽 두께에 맞춰 비드 줄 수를 정하는 경로. 바깥에서부터 비드 폭보다 ADAPT_OVERLAP 좁은 간격으로 고리를 긋되,
+    고리 자리의 폭이 2·ADAPT_OVERLAP 보다 좁으면(남은 폭을 비드 한 줄로 덮을 수 있으면) 긋지 않고, 고리가 덮지 못한
+    띠는 그 띠의 가운데 선으로 덮는다(_beneficial 로 이득인 조각만). 그러면 두께 t 인 곧은 벽에 비드가 ⌈t/W⌉ 줄 놓인다
+    (12 mm → 양쪽 2줄, 16.6 mm → 양쪽 2줄 + 가운데 1줄, 24 mm → 양쪽 2줄 + 가운데 1줄).
+    비드보다 얇은 가지는 고리가 생기지 않아 가지 가운데에 한 줄이 놓이고(넘침이 양쪽에 반씩, 합이 가장 작다),
+    가지 끝의 둥근 혹까지 선이 들어가도록 잔가지는 아주 짧은 것(0.5 mm)만 지운다(다른 방식 형상 novel1027 #14)."""
+    if A.is_empty:
+        return []
+    paths, d, step, k = [], R, W - ADAPT_OVERLAP, 0
+    while True:
+        # k 번째 고리까지 겹친 폭(ADAPT_OVERLAP·(k+1))만큼 좁은 자리는 고리 대신 가운데 선 한 줄로 덮는다
+        # (안 그러면 두께 40 mm 벽에 5줄 대신 6줄이 놓인다)
+        o = ADAPT_OVERLAP * (k + 1)
+        O = A.buffer(-d, quad_segs=QUAD, join_style="mitre", mitre_limit=10.0)
+        O = O.buffer(-o, quad_segs=QUAD).buffer(o, quad_segs=QUAD, join_style="mitre", mitre_limit=10.0)
+        if O.is_empty or O.area < 1e-3:
+            break
+        paths += _rings(O, simplify)
+        d += step
+        k += 1
+    try:
+        U = A.difference(deposit(paths)) if paths else A
+        # 버리는 가는 띠: 계산 오차(폭 0.1 mm) + 고리 k 겹이 겹치며 가운데에 남기는 띠(폭 2·ADAPT_OVERLAP·(k-1)).
+        # 뒤의 것까지 메우면 두께가 비드 폭의 배수인 벽(32 mm)에 한 줄이 통째로 더 놓인다.
+        o = 0.05 + ADAPT_OVERLAP * max(k - 1, 0)
+        U = U.buffer(-o, quad_segs=QUAD).buffer(o, quad_segs=QUAD)
+        if U.is_empty or U.area < 1.0:
+            return paths
+        # 경계 표본 간격은 얇은 벽용 중심선과 같은 MEDIAL_SPACING(1 mm). 빈틈 보강용 3 mm 로 하면 비드보다 얇거나 같은
+        # 벽에서 선이 가운데를 벗어나 지그재그로 흔들려 양옆으로 번갈아 넘친다(공개 01 층 IoU 99.7% → 97.4%)
+        lines = medial(_inter(U.buffer(R * 0.5, quad_segs=QUAD), A), spacing=MEDIAL_SPACING, min_clear=RESCUE_CLEAR, prune=0.5)
+        return paths + _beneficial(lines, U, A)
+    except _GEOS:
+        return paths
+
+
 def best_paths(A: BaseGeometry, legacy: bool = False, spiral: bool = True, both: bool = False):
     """후보 경로들 중 형상 기준(여유 포함)을 만족하는 것 가운데 예상 적층시간이 가장 짧은 것.
-    만족하는 후보가 없으면 IoU 가 가장 높은 것."""
+    만족하는 후보가 없으면 IoU 가 가장 높은 것.
+
+    답은 후보를 전부 만들어 전부 재는 _best_paths_all 과 같다. 다만 예상 적층시간이 짧은 후보부터 재고,
+    기준을 처음 통과한 후보에서 멈춘다(그보다 긴 후보는 이길 수 없다). 빈틈 보강처럼 만드는 데 비싼 후보는
+    바탕 경로의 시간을 하한으로 두고(보강하면 길어지기만 한다) 차례가 왔을 때 만든다.
+    시간이 같으면 원래 후보 순서(slot)가 앞선 것을 고르는 것도 같다."""
+    if legacy:
+        return _best_paths_all(A, legacy=True, spiral=spiral, both=both)
+    import heapq
+    s_main = main_step()
+    # 후보 자리(slot) = _best_paths_all 이 후보를 쌓는 순서. 값: 경로(이미 만든 것) 또는 None(안 만든 것)
+    names, made, makers = [], {}, {}
+    heap = []
+
+    def add(name, P=None, make=None, lb=None):
+        slot = len(names)
+        names.append(name)
+        if make is None:
+            made[slot] = P
+            heapq.heappush(heap, (_est(P), slot))
+        else:
+            makers[slot] = make
+            heapq.heappush(heap, (lb, slot))
+        return slot
+
+    inner = A.buffer(-R, quad_segs=QUAD)
+    rings_main = None
+    if inner.area < 0.5 * A.area:                     # 얇은 벽이 대부분인 층
+        add("medial", medial(A))
+    else:                                             # 두꺼운 영역 + 남은 얇은 틈은 중심선으로 보강
+        try:
+            rings_main = concentric(A, s_main, join="mitre")
+            slot_mm = add(f"mitre{s_main}+medial", make=lambda P=rings_main: _gap_medial(A, P), lb=_est(rings_main))
+        except _GEOS:
+            rings_main = None
+    mitre_slots = [slot_mm] if rings_main is not None else []
+    round_main, linked = None, []
+    for s in tuple(W * r for r in STEP_RATIOS):
+        rings = {jn: concentric(A, s, join=jn) for jn in ("round", "mitre")}
+        if s == s_main:
+            round_main = rings["round"]
+        add(f"concentric{s}", rings["round"])
+        mitre_slots.append(add(f"mitre{s}", rings["mitre"]))
+        for jn in (("round", "mitre") if spiral and s >= s_main else ()):
+            P = link_rings(rings[jn], s)
+            add(f"linked{s}{jn}", P)
+            add(f"linked{s}{jn}+medial", make=lambda P=P: _gap_medial(A, P), lb=_est(P))
+            linked.append((f"linked{s}{jn}", P))
+    sl = {}
+    for dl in (0.15, 0.3, 0.5):
+        sl[dl] = sliver(A, dl)
+        add(f"sliver{dl}", sl[dl])
+
+    def make_sliver():
+        try:
+            base = concentric(A, s_main) if round_main is None else round_main
+            gap = A.difference(deposit(base)).buffer(0)
+            if gap.area > 1.0:
+                return base + [p for p in sl[0.3] if _inter(LineString(p).buffer(R), gap).area > 0.5 * LineString(p).length]
+        except _GEOS:
+            pass
+        return None
+    add(f"concentric{s_main}+sliver", make=make_sliver,
+        lb=_est(round_main) if round_main is not None else 0.0)
+    for ms in mitre_slots:                           # 모서리 보강(+fill): 바탕 후보가 있어야 만든다
+        def make_fill(ms=ms):
+            P0 = made.get(ms)
+            if P0 is None:                           # 바탕 후보가 없다(빈 경로 []는 있는 후보로 본다)
+                return None
+            extra = _fill_extra(A, P0)
+            return P0 + extra if extra else None
+        add(names[ms] + "+fill", make=make_fill, lb=heap_lb(heap, ms))
+    # 벽 두께에 맞춰 줄 수를 정하는 경로(adaptive). 고리를 비드 폭 간격(W)으로 그은 후보에 가운데 띠를 더한 꼴이라
+    # 그 후보의 예상 시간의 95% 를 하한으로 둔다(층마다 만드는 데 0.4–1 초가 들어, 그보다 빠른 후보가 기준을 넘으면
+    # 만들지 않는다). 고리 간격 W 후보는 위 STEP_RATIOS 의 마지막(비율 1.0) rings 다.
+    add("adapt", make=lambda: adaptive(A), lb=0.95 * min(_est(rings["round"]), _est(rings["mitre"])))
+
+    best, best_ring = None, None
+    scored = {}
+    while heap:
+        key, slot = heapq.heappop(heap)
+        name = names[slot]
+        if best is not None and (not both or best_ring is not None):
+            break
+        if best is not None and name.startswith("linked"):
+            continue                                  # 남은 일은 고리만 최선 찾기
+        if slot in makers:                            # 차례가 온 비싼 후보: 지금 만든다
+            P = makers.pop(slot)()
+            made[slot] = P
+            if P:
+                heapq.heappush(heap, (_est(P), slot))
+            continue
+        P = made[slot]
+        if not P:
+            continue
+        try:
+            sc = score(A, P)
+        except _GEOS:
+            continue
+        scored[slot] = sc
+        if meets(sc):
+            if best is None:
+                best = (P, sc, name)
+            if both and best_ring is None and not name.startswith("linked"):
+                best_ring = (P, sc, name)
+    # 기준을 넘는 후보가 없다: 빈틈을 더 메운 후보를 만들어 잰다. 1) 좁은 빈틈까지(RESCUE_CLEAR 참고),
+    # 2) 그래도 없으면 폭 1 mm 보다 가는 틈까지(_gap_thin 참고). 바탕은 기본 간격의 고리(각진·둥근)와 나선.
+    # 기준을 넘는 것 가운데 예상 적층시간이 가장 짧은 것을 고른다. 앞 단계에서 찾으면 다음 단계는 만들지 않는다.
+    # 두께 맞춤 경로(adapt)가 뽑힌 층에서도 1) 은 만들어 견준다: adapt 는 빈틈을 거의 다 메우는 경로라, 빈틈을 조금
+    # 남기고 목표만 넘는 1) 이 더 빠를 때가 있다(두께 32.8 mm 격자: adapt 1.16 배, mitre/나선+medial2 0.93 배).
+    def need(cur, level):
+        return cur is None or (level == 1 and cur[2] == "adapt")
+    bases = ([(f"mitre{s_main}", rings_main)] if rings_main is not None else []) + \
+            ([(f"concentric{s_main}", round_main)] if round_main is not None else []) + linked
+    for level, tag, fill in ((1, "+medial2", lambda P0: _gap_medial(A, P0, min_clear=RESCUE_CLEAR)),
+                             (2, "+thin", lambda P0: _gap_thin(A, P0))):
+        if not (need(best, level) or (both and need(best_ring, level))):
+            break
+        rescued = []
+        for nm0, P0 in bases:
+            P = fill(P0)
+            if not P:
+                continue
+            slot = len(names)
+            names.append(nm0 + tag)
+            made[slot] = P
+            try:
+                scored[slot] = score(A, P)
+            except _GEOS:
+                continue
+            if meets(scored[slot]):
+                rescued.append(slot)
+        by_time = lambda s: (est_time(scored[s]), s)
+        ok_ring = [s for s in rescued if not names[s].startswith("linked")]
+        if need(best, level) and rescued:
+            s = min(rescued, key=by_time)
+            if best is None or est_time(scored[s]) < est_time(best[1]):
+                best = (made[s], scored[s], names[s])
+        if both and need(best_ring, level) and ok_ring:
+            s = min(ok_ring, key=by_time)
+            if best_ring is None or est_time(scored[s]) < est_time(best_ring[1]):
+                best_ring = (made[s], scored[s], names[s])
+    if best is None or (both and best_ring is None):
+        # 그래도 없으면 전부 만들고 전부 쟀다 → IoU 가 가장 높은 것(같으면 앞선 자리)
+        def top(ok_name):
+            cands = [(scored[s]["iou"], -s) for s in scored if ok_name(names[s])]
+            s = -max(cands)[1]
+            return made[s], scored[s], names[s]
+        if best is None:
+            best = top(lambda nm: True)
+        if both and best_ring is None:
+            best_ring = top(lambda nm: not nm.startswith("linked"))
+    if both:
+        return best, best_ring
+    return best
+
+
+def heap_lb(heap, slot: int) -> float:
+    """heap 에 들어 있는 slot 의 하한(바탕 후보의 예상 적층시간)."""
+    for key, s in heap:
+        if s == slot:
+            return key
+    raise KeyError(slot)
+
+
+def _best_paths_all(A: BaseGeometry, legacy: bool = False, spiral: bool = True, both: bool = False):
+    """예전 방식: 후보를 전부 만들어 전부 잰다(legacy 모드와 best_paths 검산용)."""
     cands = []
     s_main = main_step()
     if not legacy:
@@ -322,6 +669,8 @@ def best_paths(A: BaseGeometry, legacy: bool = False, spiral: bool = True, both:
             extra.append(np.array([c - u * L / 2, c + u * L / 2]))
         if extra:
             cands.append((name0 + "+fill", P0 + extra))
+    if not legacy:
+        cands.append(("adapt", adaptive(A)))
     # both=True: 후보를 한 번만 평가해 '나선 포함 최선'과 '고리만 최선'을 함께 돌려준다.
     # 포트폴리오는 두 경로 묶음을 다 쓰는데, 따로 두 번 계산하면 고리 후보를 두 번 평가하게 된다.
     best, best_ring = None, None
