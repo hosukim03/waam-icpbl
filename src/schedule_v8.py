@@ -58,19 +58,18 @@ def _pt_seg2(px, py, sx, sy, dx, dy):
 
 
 def seg_dist(a0, a1, b0, b1):
-    """XY 선분 쌍들의 최단거리. a0,b0: (2,) 또는 (N,2), a1,b1: (N,2)."""
+    """XY 선분 쌍들의 최단거리. a0,b0: (2,) 또는 (N,2), a1,b1: (N,2).
+    네 가지 '끝점 → 상대 선분' 거리를 이어 붙여 한 번에 계산한다(원소마다 같은 연산이라 값이 같고,
+    작은 배열에서는 numpy 호출 수가 시간을 좌우해 절반 가까이 빨라진다)."""
     n = len(a1)
     a0 = np.broadcast_to(np.asarray(a0, float), (n, 2))
     b0 = np.broadcast_to(np.asarray(b0, float), (n, 2))
     ax, ay, bx, by = a0[:, 0], a0[:, 1], b0[:, 0], b0[:, 1]
     dax, day = a1[:, 0] - ax, a1[:, 1] - ay
     dbx, dby = b1[:, 0] - bx, b1[:, 1] - by
-    d2 = np.minimum.reduce([
-        _pt_seg2(ax, ay, bx, by, dbx, dby),
-        _pt_seg2(a1[:, 0], a1[:, 1], bx, by, dbx, dby),
-        _pt_seg2(bx, by, ax, ay, dax, day),
-        _pt_seg2(b1[:, 0], b1[:, 1], ax, ay, dax, day),
-    ])
+    d2 = _pt_seg2(np.concatenate([ax, a1[:, 0], bx, b1[:, 0]]), np.concatenate([ay, a1[:, 1], by, b1[:, 1]]),
+                  np.concatenate([bx, bx, ax, ax]), np.concatenate([by, by, ay, ay]),
+                  np.concatenate([dbx, dbx, dax, dax]), np.concatenate([dby, dby, day, day])).reshape(4, n).min(axis=0)
     dist = np.sqrt(d2)
     den = dax * dby - day * dbx                           # 교차하면 0
     ox, oy = bx - ax, by - ay
@@ -232,9 +231,10 @@ class Checker:
         # 다른 로봇 두 대의 '계획 구간'과 '서 있는 꼬리 구간'을 한 번의 거리 계산으로 묶는다
         others = [j for j in range(len(self.robots)) if j != i]
         A1, B0, B1, spans = [], [], [], []
+        mine = np.tile(rel_xy, (K, 1))
         for j in others:
             tl, rb = self.tl[j], self.robots[j]
-            A1.append(np.tile(rel_xy, (K, 1)))
+            A1.append(mine)
             B1.append(tl.xy(times, lo_t, hi_t))
             B0.append(np.broadcast_to(rb.base, (K * M, 2)))
             spans.append(("main", j, K * M, None))
@@ -346,6 +346,7 @@ def _place_layer(ctx, k, paths, z, zl, P, policy=None):
     park_end = P.get("park_end", True)       # 층 끝에 주차점까지 물릴지
     yield_mid = P.get("yield_mid", False)
     islands = P.get("islands", False)        # 떨어진 섬은 섬 단위로 로봇에 배분    # 비켜설 때 팔만 접고 주차점까지는 안 감          # 아래에서 P 는 경로 변수로 재사용되므로 먼저 꺼내 둔다
+    shift = P.get("shift") or {}             # 국소 탐색이 옮겨 보는 부채꼴 경계 {배정 로봇 수: {경계: 변화}}
 
     def go_park(j, zl, first_park=False):
         """로봇 j 를 주차점으로 물린다 (충돌 없는 시각을 찾아서)."""
@@ -404,6 +405,7 @@ def _place_layer(ctx, k, paths, z, zl, P, policy=None):
     # 좁은 형상은 팔이 250mm 떨어져야 해서 3대가 동시에 못 들어간다. 그럴 때는 로봇 수를 줄이면
     # 서로 비켜 주는 시간이 사라져 오히려 빠르다(--robots 1/2, 안 쓰는 로봇은 주차한 채 둔다).
     labeler = None
+    ctx["lab"] = None                        # 이 층에서 쓴 부채꼴 배정(국소 탐색이 본다): (배정기, 로봇 번호들)
     if nrob < 3:
         # 팔 길이(1500mm) 안에 그 층 전체가 들어오는 조합만 쓴다. 안 되면 그 층은 3대로 돌린다.
         P = np.vstack([np.asarray(Q, float)[:, :2] for Q in paths])
@@ -415,7 +417,7 @@ def _place_layer(ctx, k, paths, z, zl, P, policy=None):
         else:
             # 어느 두 대를 쓸지(--pair). 형상이 한쪽으로 치우치면 조합에 따라 유불리가 갈린다.
             act = pair if pair else [0, 1]
-            lb = SectorLabeler(paths, [robots[i].base for i in act])
+            lb = SectorLabeler(paths, [robots[i].base for i in act], shift=shift.get(2))
             if getattr(lb, "unreach", 1.0) <= 0.0:
                 # SectorLabeler 는 선분 가운데 점만 도달 거리를 보므로 긴 선분의 끝점은 팔 밖일 수 있다
                 # (새 형상 08: 1503.8mm 로 FAIL). 경로를 2mm 로 촘촘히 나눠 모든 점이 담당 로봇
@@ -425,13 +427,17 @@ def _place_layer(ctx, k, paths, z, zl, P, policy=None):
                 bases = np.array([robots[i].base for i in range(3)])
                 if np.all(np.hypot(*(dense - bases[own]).T) <= REACH_OK):
                     labeler = lambda p, _lb=lb, _act=act: ("S", _act[_lb.owner(p)])
+                    ctx["lab"] = (lb, list(act))
     if labeler is None and islands and nrob == 3:
         il = IslandLabeler(paths, [rb.base for rb in robots])   # 떨어진 섬이 여럿이면 섬 통째로 배분
         if il.valid:
             labeler = il
     if labeler is None:
-        labeler = (SectorLabeler(paths, [rb.base for rb in robots])
-                   if getattr(opts, "balance", True) else v1.seq_label)
+        if getattr(opts, "balance", True):
+            labeler = SectorLabeler(paths, [rb.base for rb in robots], shift=shift.get(3))
+            ctx["lab"] = (labeler, [0, 1, 2])
+        else:
+            labeler = v1.seq_label
     groups = {}
     for P in paths:
         for (_, o), pc in split(P, labeler):
@@ -476,6 +482,15 @@ def _place_layer(ctx, k, paths, z, zl, P, policy=None):
         for pid, pc in enumerate(ordered):
             for ci, ch in enumerate(chunkify(pc, opts.chunk)):
                 queues[o].append((pid, ci, ch))
+    if shift:
+        # 경계를 옮긴 배정(국소 탐색)은 쓰기 전에 팔이 닿는지 본다. split 은 선분 양 끝의 주인이 같으면 가운데를
+        # 보지 않아서, 긴 직선이 옮긴 경계 둘을 함께 넘으면 가운데 쪽 로봇이 팔 밖 끝까지 통째로 받는다
+        # (연습 08, 층마다 2번: 로봇 2 가 1,613 mm). 팔이 닿는 곳은 원판이라 조각의 꼭짓점만 보면 된다.
+        for i, q in queues.items():
+            if q:
+                pts = np.vstack([ch for _, _, ch in q])[:, :2]
+                if float(np.max(np.hypot(*(pts - robots[i].base).T))) > REACH_OK:
+                    raise OutOfReach(f"layer {k}: 로봇 {i + 1} 의 조각이 팔이 닿는 범위 밖")
 
     if policy is not None:                           # 층 단위 보상용 기록
         policy.layer = k
@@ -483,12 +498,19 @@ def _place_layer(ctx, k, paths, z, zl, P, policy=None):
     arc_open = [False] * 3
     last_key = [None] * 3
     while any(queues[i] for i in range(3)):
-        best, bkey, blocked = None, (float("inf"), 0), set()
+        best, bkey, blocked = None, (float("inf"), 0, 0), set()
         cands = []                                   # 정책(PPO)용: 충돌 검사를 통과한 모든 후보
-        for i in range(3):
+        # 시계가 이른 로봇부터 본다. 어떤 후보도 그 로봇의 시계(rb.t)보다 먼저 시작할 수 없으므로, 시계가 이미
+        # 지금 최선보다 늦은 로봇은 볼 필요가 없다(고르는 답은 같고 충돌 검사만 준다). 시작 시각과 큐 순서가
+        # 같으면 로봇 번호가 작은 쪽(key 의 셋째 값) = 예전에 로봇 0→2 순서로 보던 것과 같은 답.
+        # 정책(PPO)은 후보 전체를 보므로 예전처럼 다 본다.
+        scan = sorted(range(3), key=lambda i: robots[i].t) if policy is None else range(3)
+        for i in scan:
             if not queues[i]:
                 continue
             rb = robots[i]
+            if policy is None and best is not None and rb.t > bkey[0]:
+                continue
             pos = rb.pos.copy()
             for qi in range(min(opts.lookahead, len(queues[i]))):
                 pid, ci, ch = queues[i][qi]
@@ -499,7 +521,7 @@ def _place_layer(ctx, k, paths, z, zl, P, policy=None):
                     if not chk.conflict(i, pts):
                         cand = (rb.t, qi, i, "cont")
                         cands.append(cand)
-                        key = (rb.t, qi)                 # 이어 붙이면 준비 손해 0
+                        key = (rb.t, qi, i)              # 이어 붙이면 준비 손해 0
                         if best is None or key < bkey:
                             best, bkey = cand, key
                         break
@@ -515,7 +537,7 @@ def _place_layer(ctx, k, paths, z, zl, P, policy=None):
                 over = (off + abs(max(pos[2], zl) - pos[2]) / TRAVEL_V
                         + float(np.hypot(ch[0][0] - pos[0], ch[0][1] - pos[1])) / TRAVEL_V
                         + LIFT / TRAVEL_V + arc_on)
-                key = (s + w_over * over, qi)
+                key = (s + w_over * over, qi, i)
                 if best is None or key < bkey:
                     best, bkey = cand, key
                 if abs(s - s0) < 1e-9:               # 큐 순서는 그대로 지킨다(아크 이어가기)
@@ -595,6 +617,134 @@ def _place_layer(ctx, k, paths, z, zl, P, policy=None):
     ctx["first"] = first
     return yields
 
+
+# ---------------------------------------------------------------- 국소 탐색: 층마다 부채꼴 경계 옮겨 보기
+LS_STEP = 0.05      # 경계를 한 번에 옮기는 폭(이웃한 두 로봇 방향 사이 각도의 비율, 3대면 약 6°)
+
+
+class OutOfReach(Exception):
+    """경계를 옮겨 본 배정에 팔이 닿지 않는 조각이 생겼다(그 시도는 버린다)."""
+
+
+def _snap(ctx):
+    """층을 시작하기 전 상태. 궤적은 뒤에 덧붙기만 하고 마지막 행만 고쳐 쓰므로 길이와 마지막 행이면 된다."""
+    rs = [(len(rb.rows), rb.rows[-1], rb.pos.copy(), rb.t) for rb in ctx["robots"]]
+    ts = [(tl.n, len(tl.T), (tl.T[-1], tl.X[-1], tl.Y[-1]) if tl.T else None) for tl in ctx["chk"].tl]
+    return rs, ts, list(ctx["parked"]), ctx["loads"].copy(), ctx["first"]
+
+
+def _restore(ctx, s):
+    rs, ts, parked, loads, first = s
+    for rb, (n, last, pos, t) in zip(ctx["robots"], rs):
+        del rb.rows[n:]
+        rb.rows[-1] = last
+        rb.pos, rb.t = pos.copy(), t
+    for tl, (n, m, last) in zip(ctx["chk"].tl, ts):
+        del tl.T[m:], tl.X[m:], tl.Y[m:]
+        if last is not None:
+            tl.T[-1], tl.X[-1], tl.Y[-1] = last
+        tl.n = n
+    ctx["parked"][:] = parked
+    ctx["loads"][:] = loads
+    ctx["first"] = first
+
+
+def _capture(ctx, s):
+    """층을 끝낸 상태 중 시작 상태 s 뒤로 바뀐 부분."""
+    rs, ts, *_ = s
+    r = [(rb.rows[n - 1:], rb.pos.copy(), rb.t) for rb, (n, *_) in zip(ctx["robots"], rs)]
+    t = [(tl.T[max(m - 1, 0):], tl.X[max(m - 1, 0):], tl.Y[max(m - 1, 0):], tl.n)
+         for tl, (_, m, _) in zip(ctx["chk"].tl, ts)]
+    return r, t, list(ctx["parked"]), ctx["loads"].copy(), ctx["first"], ctx["lab"]
+
+
+def _apply(ctx, s, c):
+    rs, ts, *_ = s
+    r, t, parked, loads, first, lab = c
+    for rb, (n, *_), (tail, pos, tt) in zip(ctx["robots"], rs, r):
+        del rb.rows[n - 1:]
+        rb.rows.extend(tail)
+        rb.pos, rb.t = pos.copy(), tt
+    for tl, (_, m, _), (T, X, Y, n) in zip(ctx["chk"].tl, ts, t):
+        i = max(m - 1, 0)
+        del tl.T[i:], tl.X[i:], tl.Y[i:]
+        tl.T.extend(T)
+        tl.X.extend(X)
+        tl.Y.extend(Y)
+        tl.n = n
+    ctx["parked"][:] = parked
+    ctx["loads"][:] = loads
+    ctx["first"] = first
+    ctx["lab"] = lab
+
+
+def _place_ls(ctx, k, paths, z, zl, P, policy, budget, step=LS_STEP, warm=False):
+    """국소 탐색으로 한 층을 계획한다. 먼저 그대로 계획하고, 가장 늦게 끝난 로봇의 부채꼴 경계를 step 만큼
+    안쪽으로 옮겨(그 로봇 몫을 이웃에게 조금 넘겨) 그 층만 다시 계획해 본다. 층이 더 일찍 끝나면 받아들이고
+    그 상태에서 다시 옮겨 보며, 나아지지 않거나 다시 계획한 횟수가 budget 에 닿으면 멈춘다.
+
+    부채꼴 경계는 로봇마다 적층 길이가 같아지게 맞춘 것이라, 서로 비키느라 기다리는 시간은 모른다
+    (연습 09·새 형상 19: 층마다 마지막 로봇이 평균보다 늦게 끝난 시간을 더하면 makespan 의 24~29%).
+    실제로 계획해 보고 고르면 그 차이를 줄일 수 있다. 층 하나만 다시 계획하므로 그 층이 나빠지는 일은 없다
+    (다음 층에는 영향이 갈 수 있다). 부채꼴 배정을 쓰지 않는 층(1대, 섬 배분, --no-balance)은 그대로 둔다.
+    warm: 아래층에서 받아들인 경계 이동을 먼저 시험한다(이것도 다시 계획 한 번으로 센다)."""
+    s0 = _snap(ctx)
+    y = _place_layer(ctx, k, paths, z, zl, P, policy)
+    if ctx["lab"] is None or ctx["lab"][0].bounds is None or budget <= 0:
+        return y
+    lab, rid = ctx["lab"]
+    nb, n = len(rid), len(lab.order)
+    best = (max(rb.t for rb in ctx["robots"]), _capture(ctx, s0), y)
+    cur, tries = {}, 0
+    fin = [rb.t for rb in ctx["robots"]]
+    key = (nb, tuple(int(o) for o in lab.order))
+    prev = ctx.setdefault("ls_prev", {}).get(key) if warm else None
+    if prev:
+        # 아래층에서 받아들인 경계 이동부터 시험한다. 이웃한 층은 단면이 비슷해 같은 이동이 또 통하는 일이 많고
+        # (새 형상 19·새 방식 17 은 나아진 층의 절반), 거기서 더 옮겨 볼 수 있어 횟수 안에서 더 멀리 간다.
+        _restore(ctx, s0)
+        tries += 1
+        try:
+            y2 = _place_layer(ctx, k, paths, z, zl, dict(P, shift={nb: prev}), policy)
+        except OutOfReach:
+            y2 = None
+        e2 = max(rb.t for rb in ctx["robots"]) if y2 is not None else float("inf")
+        if e2 < best[0] - 1e-6:
+            best, cur = (e2, _capture(ctx, s0), y2), dict(prev)
+            fin = [rb.t for rb in ctx["robots"]]
+    while tries < budget:
+        li = max(range(nb), key=lambda q: fin[rid[q]])        # 가장 늦게 끝난 로봇(배정기 안 번호)
+        m = lab.order.index(li)
+        # 그 로봇 몫을 줄이는 두 방향: 위쪽 경계 m 을 내리거나 아래쪽 경계 m-1 을 올린다. 일찍 끝난 이웃 쪽부터.
+        moves = [(m, -step), ((m - 1) % n, +step)]
+        if fin[rid[lab.order[(m - 1) % n]]] < fin[rid[lab.order[(m + 1) % n]]]:
+            moves.reverse()
+        improved = False
+        for bk, d in moves:
+            if tries >= budget:
+                break
+            trial = dict(cur)
+            trial[bk] = trial.get(bk, 0.0) + d
+            _restore(ctx, s0)
+            tries += 1
+            try:
+                y2 = _place_layer(ctx, k, paths, z, zl, dict(P, shift={nb: trial}), policy)
+            except OutOfReach:                         # 팔이 안 닿는 조각이 생기는 이동은 버린다
+                continue
+            e2 = max(rb.t for rb in ctx["robots"])
+            if e2 < best[0] - 1e-6:
+                best, cur, improved = (e2, _capture(ctx, s0), y2), trial, True
+                fin = [rb.t for rb in ctx["robots"]]
+                break
+        if not improved:
+            break
+    if warm:
+        ctx["ls_prev"][key] = cur
+    _restore(ctx, s0)
+    _apply(ctx, s0, best[1])
+    return best[2]
+
+
 class Pruned(Exception):
     """이미 다른 설정보다 느려져 더 계산할 필요가 없다."""
 
@@ -610,10 +760,21 @@ def apply_config(cfg, arc: bool = False) -> None:
     toolpath.configure(cfg, arc)
 
 
-def run(job: Path, opts, policy=None):
+def prepare(job: Path):
+    """config·층 수·층 단면. 한 프로세스에서 여러 설정을 돌릴 때 한 번만 읽고 자른다."""
     cfg = load_config(job / "config.yaml")
-    apply_config(cfg, bool(opts.arc))
     mesh = load_target_mesh(job / "target.stl", cfg)
+    pr = cfg.process
+    n = int(np.ceil((mesh.bounds[1, 2] - pr.build_plane_z_mm) / pr.layer_height_mm - 1e-9))
+    return cfg, n, slice_target_layers(mesh, list(range(n)), cfg)
+
+
+def run(job: Path, opts, policy=None, pre=None, path_cache=None, only=None, bound=None):
+    """pre = prepare() 결과(없으면 여기서 읽는다), path_cache = {층: (경로, IoU)},
+    only = 이 층들만 계획한다(설정을 짧게 시험할 때), bound = 이미 끝난 설정의 최선 makespan(가지치기,
+    --bound-file 과 같은 규칙). 나머지는 명령행 실행과 같다."""
+    cfg, n, layers = pre if pre is not None else prepare(job)
+    apply_config(cfg, bool(opts.arc))
     pr = cfg.process
     arc_on = (pr.arc_on_time_s or 0.0) if opts.arc else 0.0
     arc_off = (pr.arc_off_time_s or 0.0) if opts.arc else 0.0
@@ -622,8 +783,6 @@ def run(job: Path, opts, policy=None):
     # 토치 간 기준(두 tcp_radius 합)이 더 크면 그쪽을 쓴다. 토치는 팔 선분의 끝점이라 팔 거리 ≥ 기준이면 토치도 만족한다.
     required = max(required, max(r.tcp_radius_mm for r in cfg.robots) * 2)
 
-    n = int(np.ceil((mesh.bounds[1, 2] - pr.build_plane_z_mm) / pr.layer_height_mm - 1e-9))
-    layers = slice_target_layers(mesh, list(range(n)), cfg)
     robots = [Robot(r.id, r.base_xyz_mm, r.home_xyz_mm) for r in sorted(cfg.robots, key=lambda r: r.id)]
     v1.DIRS = [v1.ang_of(rb.base) for rb in robots]
     chk = Checker(robots, required, getattr(opts, "max_tries", MAX_TRIES),
@@ -635,6 +794,9 @@ def run(job: Path, opts, policy=None):
     parked = [False] * 3
     min_iou, first, yields = 1.0, True, 0
     roll = ROLLOUTS.get(getattr(opts, "rollout", "") or "", None)   # 층마다 시험해 볼 설정들
+    ls = int(getattr(opts, "ls", 0) or 0)                # 국소 탐색: 층마다 다시 계획해 볼 최대 횟수(0=안 함)
+    ls_step = float(getattr(opts, "ls_step", LS_STEP) or LS_STEP)
+    ls_warm = bool(getattr(opts, "ls_warm", False))
     loads = np.zeros(3)                                  # 로봇별 누적 적층 시간(정책 특징)
 
     ctx = {"robots": robots, "chk": chk, "parked": parked, "loads": loads, "first": True}
@@ -648,8 +810,7 @@ def run(job: Path, opts, policy=None):
          "sweep": bool(getattr(opts, "sweep", False)),
          "pair": ([int(x) - 1 for x in str(opts.pair).split(",")] if getattr(opts, "pair", None) else None)}
 
-    path_cache = None
-    if getattr(opts, "paths", None):
+    if path_cache is None and getattr(opts, "paths", None):
         import pickle
         with open(opts.paths, "rb") as _f:
             path_cache = pickle.load(_f)
@@ -657,21 +818,24 @@ def run(job: Path, opts, policy=None):
     reuse_prev, prev_paths = bool(getattr(opts, "reuse_prev", False)), None
     # 예상 완료 시각으로 가지치기하려면 전체 적층 길이가 필요하다(경로 캐시가 있을 때만)
     lens = {}
-    if bound_file and path_cache is not None:
+    if (bound_file or bound is not None) and path_cache is not None:
         lens = {k: sum(plen(np.asarray(Q)) for Q in path_cache[k][0])
                 for k in path_cache if path_cache[k][0]}
     total_len, done_len = float(sum(lens.values())), 0.0
     for k in range(n):
         A = layers[k]
-        if A.is_empty:
+        if A.is_empty or (only is not None and k not in only):
             continue
-        if bound_file:
+        if bound_file or bound is not None:
             # 가지치기: 포트폴리오에서 먼저 끝난 설정의 makespan 이 여기 적힌다. 지금 로봇 시각이 이미
             # 그보다 크면 이 설정은 절대 이길 수 없으므로(시각은 줄지 않음) 바로 멈춘다. 결과는 그대로.
-            try:
-                bnd = float(Path(bound_file).read_text().strip() or "inf")
-            except (OSError, ValueError):
-                bnd = float("inf")
+            if bound is not None:
+                bnd = float(bound)
+            else:
+                try:
+                    bnd = float(Path(bound_file).read_text().strip() or "inf")
+                except (OSError, ValueError):
+                    bnd = float("inf")
             clock = max(rb.t for rb in ctx["robots"])
             if clock > bnd:
                 raise Pruned(f"layer {k}: {clock:.0f}s > 최선 {bnd:.0f}s")
@@ -699,7 +863,8 @@ def run(job: Path, opts, policy=None):
 
         done_len += lens.get(k, 0.0)
         if not roll:
-            yields += _place_layer(ctx, k, paths, z, zl, P, policy)
+            yields += (_place_ls(ctx, k, paths, z, zl, P, policy, ls, ls_step, ls_warm) if ls > 0
+                       else _place_layer(ctx, k, paths, z, zl, P, policy))
         else:
             # 층마다 설정 몇 가지를 시험해 그 층을 가장 빨리 끝낸 것만 남긴다(층 단위 되돌리기).
             bestc = None
@@ -742,7 +907,7 @@ def write(job, out, robots):
     return nrows
 
 
-def main():
+def parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser()
     ap.add_argument("job")
     ap.add_argument("out")
@@ -784,9 +949,19 @@ def main():
                     help="일감을 받는 로봇 수. 좁은 형상은 1~2대가 더 빠를 수 있다")
     ap.add_argument("--overhead-w", dest="overhead_w", type=float, default=0.0,
                     help="후보를 고를 때 준비 손해(아크 재점화·이동)에 주는 가중치. 0이면 기존 그리디")
+    ap.add_argument("--ls", type=int, default=0,
+                    help="국소 탐색: 층마다 가장 늦게 끝난 로봇의 부채꼴 경계를 옮겨 다시 계획해 볼 최대 횟수(0=안 함)")
+    ap.add_argument("--ls-step", dest="ls_step", type=float, default=LS_STEP,
+                    help="국소 탐색에서 경계를 한 번에 옮기는 폭(이웃 로봇 방향 사이 각도의 비율)")
+    ap.add_argument("--ls-warm", dest="ls_warm", action="store_true",
+                    help="국소 탐색에서 아래층이 받아들인 경계 이동을 먼저 시험한다")
     ap.add_argument("--policy", default=None, help="ppo_policy.py 로 학습한 정책(.npz)")
     ap.add_argument("--debug", action="store_true")
-    a = ap.parse_args()
+    return ap
+
+
+def main():
+    a = parser().parse_args()
     t0 = time.time()
     job, out = Path(a.job), Path(a.out)
     pol = None

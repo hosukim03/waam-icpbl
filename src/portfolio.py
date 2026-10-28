@@ -81,6 +81,10 @@ VARIANTS = {
                                        "--link-gap", "13"], "ring"),
     "sp_r2c160m5a": ("schedule_v8.py", ["--robots", "2", "--chunk", "160", "--margin", "5", "--band-dir", "alt",
                                         *NP, *LA], "sp"),
+    # 위와 같고 조각만 80 mm. 아크 대기를 뺀 뒤로는 같은 줄의 다음 조각을 끊지 않고 이어 그리므로 잘게 잘라도 손해가
+    # 거의 없고, 로봇이 작은 단위로 일을 맡아 막혔을 때 덜 기다린다(공개 04: 160 mm 28,876 s → 80 mm 27,853 s)
+    "sp_r2c80m5a": ("schedule_v8.py", ["--robots", "2", "--chunk", "80", "--margin", "5", "--band-dir", "alt",
+                                       *NP, *LA], "sp"),
 }
 
 

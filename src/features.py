@@ -52,13 +52,22 @@ def _points(poly, n: int) -> np.ndarray:
     return pts
 
 
+def feature_layers(n: int) -> list[int]:
+    """특징 계산에 쓰는 층 번호(바닥~꼭대기 고르게 N_LAYERS 개)."""
+    return sorted({int(round(x)) for x in np.linspace(0, n - 1, min(N_LAYERS, n))})
+
+
 def shape_features(job: Path) -> dict:
     cfg = load_config(Path(job) / "config.yaml")
     mesh = load_target_mesh(Path(job) / "target.stl", cfg)
     pr = cfg.process
     n = int(np.ceil((mesh.bounds[1, 2] - pr.build_plane_z_mm) / pr.layer_height_mm - 1e-9))
-    ks = sorted({int(round(x)) for x in np.linspace(0, n - 1, min(N_LAYERS, n))})
-    layers = slice_target_layers(mesh, ks, cfg)
+    return shape_features_from(cfg, n, slice_target_layers(mesh, feature_layers(n), cfg))
+
+
+def shape_features_from(cfg, n: int, layers: dict) -> dict:
+    """이미 자른 층 단면(layers[k])으로 특징을 계산한다. layers 에 feature_layers(n) 의 층이 있어야 한다."""
+    ks = feature_layers(n)
     robots = sorted(cfg.robots, key=lambda r: r.id)
     bases = [np.array(r.base_xyz_mm[:2], float) for r in robots]
     reach = [float(r.xy_reach_radius_mm) for r in robots]

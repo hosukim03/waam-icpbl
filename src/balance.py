@@ -27,7 +27,7 @@ def _wrap(a):
 
 
 class SectorLabeler:
-    def __init__(self, paths, bases, reach=None, steps=48, passes=3):
+    def __init__(self, paths, bases, reach=None, steps=48, passes=3, shift=None):
         reach = REACH - REACH_MARGIN if reach is None else reach   # REACH 는 스케줄러가 config 로 맞춘다
         self.bases = [np.asarray(b[:2], float) for b in bases]
         pts, wts = [], []
@@ -92,9 +92,14 @@ class SectorLabeler:
             if not improved:
                 break
         self.ts = ts
-        self.bounds = [spans[k][0] + spans[k][1] * ts[k] for k in range(n)]
         self.load = best[1]
         self.unreach = best[2]
+        if shift:
+            # 국소 탐색(schedule_v8._place_ls)이 경계를 옮겨 본다: {경계 번호: 비율 변화}. 적층 길이만 보고 맞춘
+            # 경계가 실제로는 서로 비키느라 한 로봇만 늦게 끝날 때가 있다. 팔이 닿는지는 owner 와 스케줄러가 다시 본다.
+            ts = np.clip(ts + np.array([shift.get(k, 0.0) for k in range(n)]), 0.02, 0.98)
+            self.ts = ts
+        self.bounds = [spans[k][0] + spans[k][1] * ts[k] for k in range(n)]
         self.reach = reach
 
     def owner(self, p):
