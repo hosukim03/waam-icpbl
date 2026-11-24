@@ -2,15 +2,17 @@
 """평가 결과에서 대시보드(dashboard/)가 쓰는 작은 파일만 runs/ 로 모은다(WAAM venv 파이썬).
 
 eval  : 묶음 평가 결과 폴더(형상마다 solve.txt, _val/<형상>/summary.json·layer_metrics.csv)를 runs/evals/<이름>/ 로
-        복사하고 runs/evals/index.json 에 이름·묶음·설명을 적는다. 경로(trajectory.csv)는 커서 뺀다.
+        복사하고 runs/evals/index.json 에 이름·묶음·설명을 적는다. 경로(trajectory.csv)는 커서 빼고, --traj 를 주면
+        gzip 으로 줄여(trajectory.csv.gz) config.yaml 과 함께 넣는다(대시보드 '움직임 그림'이 쓴다).
         --bound 를 주면 묶음의 '이론상 최소 시간'을 형상마다 계산해 runs/evals/bounds/<묶음 폴더 이름>.json 에 둔다.
 timing: 코어 1개 계산 시간 측정 로그(형상 방법 벽시계 … 꼴)를 runs/timing/<이름>.log 로 복사하고 index.json 에 적는다.
 
-usage: python tools/collect_evals.py eval <결과 폴더> <이름> <묶음 폴더> "<설명>" [--log <요약 로그>] [--bound]
+usage: python tools/collect_evals.py eval <결과 폴더> <이름> <묶음 폴더> "<설명>" [--log <요약 로그>] [--bound] [--traj]
        python tools/collect_evals.py timing <로그 파일> <이름> <묶음 폴더> "<설명>"
 """
 import argparse
 import datetime
+import gzip
 import json
 import shutil
 from pathlib import Path
@@ -67,6 +69,7 @@ def main() -> None:
     ap.add_argument("desc")
     ap.add_argument("--log", default=None)
     ap.add_argument("--bound", action="store_true")
+    ap.add_argument("--traj", action="store_true", help="궤적을 gzip 으로 줄여 같이 넣는다")
     a = ap.parse_args()
     src, set_dir = Path(a.src), Path(a.set_dir)
     rel = set_dir.resolve().relative_to(ROOT).as_posix() if set_dir.resolve().is_relative_to(ROOT) else str(set_dir)
@@ -89,6 +92,10 @@ def main() -> None:
         for f in ("summary.json", "layer_metrics.csv", "robot_metrics.csv"):
             if (src / "_val" / job.name / f).exists():
                 shutil.copyfile(src / "_val" / job.name / f, d / f)
+        if a.traj and (job / "trajectory.csv").exists():
+            with open(job / "trajectory.csv", "rb") as fi, gzip.open(d / "trajectory.csv.gz", "wb", compresslevel=6) as fo:
+                shutil.copyfileobj(fi, fo)
+            shutil.copyfile(job / "config.yaml", d / "config.yaml")
         n += 1
     if a.log and Path(a.log).exists():
         shutil.copyfile(a.log, dst / "eval.log")

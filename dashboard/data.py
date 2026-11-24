@@ -144,3 +144,134 @@ def read_report(p: Path) -> pd.DataFrame:
 
 def images() -> list[Path]:
     return sorted((ROOT / "tools").glob("*.png"), key=lambda p: p.stat().st_mtime, reverse=True)
+
+
+# ---------------------------------------------------------------- 움직임 그림(궤적을 층마다 나누기)
+PARK_R = 900.0      # 주차점: 베이스 방향으로 작업대 중심에서 이만큼(src/schedule_v1.PARK_R)
+WAIT_MIN = 1.0      # 이보다 짧은 기다림은 그림에 표시하지 않는다(s)
+
+
+def traj_shapes(name: str) -> list[str]:
+    """궤적을 같이 모은(collect_evals --traj) 형상들."""
+    base = RUNS / "evals" / name
+    return sorted(p.name for p in base.iterdir() if (p / "trajectory.csv.gz").exists()) if base.exists() else []
+
+
+@st.cache_data(ttl=600, max_entries=6, show_spinner="궤적을 층마다 나누는 중…")
+def motion(name: str, shape: str, set_dir: str) -> dict | None:
+    """궤적의 구간(행 i → i+1)을 로봇·층·종류로 나눈다. 종류: D 쌓기, T 이동하기, W 기다리기, E 층 끝 기다리기.
+    층은 쌓는 높이(z)로 정하고, 쌓지 않는 구간은 그 로봇이 다음에 쌓는 층에 넣는다. 다만 한 층의 마지막 쌓기 바로 뒤에
+    이어지는 기다림은 다른 로봇이 그 층을 끝내기를 기다리는 시간이라 앞 층의 '층 끝 기다림'(E)으로 둔다.
+    로봇이 그 층에서 쌓지 않으면(2대 설정의 세 번째 로봇 등) 시간으로 층을 정한다."""
+    import numpy as np
+    import yaml
+    d = RUNS / "evals" / name / shape
+    p = d / "trajectory.csv.gz"
+    if not p.exists():
+        return None
+    cfg_p = d / "config.yaml" if (d / "config.yaml").exists() else ROOT / set_dir / shape / "config.yaml"
+    cfg = yaml.safe_load(cfg_p.read_text(encoding="utf-8"))
+    df = pd.read_csv(p)
+    zs = np.round(df.loc[df["mode"] == "D", "z_mm"].to_numpy(), 3)
+    levels = np.unique(zs)
+    rows = []
+    for rid, g in df.groupby("robot_id", sort=True):
+        t, x, y, z = (g[c].to_numpy(float) for c in ("time_s", "x_mm", "y_mm", "z_mm"))
+        m = g["mode"].to_numpy(str)
+        n = len(t) - 1
+        if n <= 0:
+            continue
+        sm = m[:-1].copy()
+        isd = sm == "D"
+        lay = np.full(n, -1)
+        lay[isd] = np.searchsorted(levels, np.round(z[:-1][isd], 3))
+        di = np.nonzero(isd)[0]
+        if len(di):
+            pos = np.searchsorted(di, np.arange(n))
+            nxt, prv = di[np.minimum(pos, len(di) - 1)], di[np.maximum(pos - 1, 0)]
+            lay[~isd] = lay[nxt][~isd]
+            run = False                                   # 마지막 쌓기 바로 뒤의 기다림 줄
+            for i in range(n):
+                if isd[i]:
+                    run = True
+                    continue
+                if run and sm[i] == "W" and pos[i] > 0 and lay[nxt[i]] != lay[prv[i]]:
+                    sm[i], lay[i] = "E", lay[prv[i]]
+                else:
+                    run = False
+        rows.append(pd.DataFrame({"robot": rid, "layer": lay, "kind": sm, "t0": t[:-1], "t1": t[1:],
+                                  "x0": x[:-1], "y0": y[:-1], "x1": x[1:], "y1": y[1:]}))
+    seg = pd.concat(rows, ignore_index=True)
+    seg = seg[seg["t1"] > seg["t0"]]
+    # 쌓지 않는 로봇의 구간: 층마다 쌓는 로봇들이 그 층을 시작한 시각으로 나눈다
+    starts = seg[seg["layer"] >= 0].groupby("layer")["t0"].min().sort_index()
+    miss = seg["layer"] < 0
+    if miss.any() and len(starts):
+        seg.loc[miss, "layer"] = np.maximum(np.searchsorted(starts.to_numpy(), seg.loc[miss, "t0"].to_numpy(),
+                                                            side="right") - 1, 0)
+    robots = []
+    for r in sorted(cfg["robots"], key=lambda r: r["id"]):
+        b = np.asarray(r["base_xyz_mm"][:2], float)
+        robots.append({"id": r["id"], "base": b.tolist(), "park": (b / np.linalg.norm(b) * PARK_R).tolist(),
+                       "reach": float(r["xy_reach_radius_mm"])})
+    span = seg.groupby("layer").agg(t0=("t0", "min"), t1=("t1", "max"))
+    return {"seg": seg, "robots": robots, "n": len(levels), "span": span,
+            "work_r": float(cfg.get("workspace", {}).get("radius_mm", 700.0))}
+
+
+def _thin(xs, ys, hs, tol=3.0):
+    """이어진 선에서 앞 점과 tol(mm) 안인 점은 빼고 0.1 mm·0.1 s 로 반올림한다(끝점·끊긴 곳은 남김). 재생 그림을 가볍게."""
+    ox, oy, oh = [], [], []
+    last = None
+    for i, (x, y, h) in enumerate(zip(xs, ys, hs)):
+        end = i + 1 == len(xs) or xs[i + 1] is None
+        if x is None or last is None or end or (x - last[0]) ** 2 + (y - last[1]) ** 2 >= tol * tol:
+            ox.append(None if x is None else round(x, 1)); oy.append(None if y is None else round(y, 1))
+            oh.append(None if h is None else round(h, 1))
+            last = None if x is None else (x, y)
+    return ox, oy, oh
+
+
+def layer_view(seg: pd.DataFrame, robots: list, t0: float, thin: bool = False) -> list[dict]:
+    """한 층의 구간(seg)을 로봇마다 그림용으로: 쌓은 선 D, 옮긴 길 T, 기다린 곳 W, 층 끝 기다림 E, 비켜선 곳 K, 시간 합."""
+    import numpy as np
+    out = []
+    for r in robots:
+        gr = seg[seg["robot"] == r["id"]]
+        dt = (gr["t1"] - gr["t0"]).to_numpy()
+        kind = gr["kind"].to_numpy()
+        v = {"id": r["id"], "sum": {k: float(dt[kind == k].sum()) for k in "DTWE"}}
+        for k in "DT":
+            xs, ys, hs, prev = [], [], [], None
+            sel = gr[gr["kind"] == k]
+            for x0, y0, x1, y1, a, b in sel[["x0", "y0", "x1", "y1", "t0", "t1"]].itertuples(index=False):
+                if k == "T" and (x1 - x0) ** 2 + (y1 - y0) ** 2 < 0.25:      # 제자리에서 오르내리기만
+                    continue
+                if prev is None or k == "T" or abs(prev[0] - x0) > 1e-6 or abs(prev[1] - y0) > 1e-6:
+                    if xs:
+                        xs.append(None); ys.append(None); hs.append(None)
+                    xs.append(x0); ys.append(y0); hs.append(a - t0)
+                xs.append(x1); ys.append(y1); hs.append(b - t0)
+                prev = (x1, y1)
+            v[k] = _thin(xs, ys, hs, tol=3.0 if k == "D" else 0.0) if thin else (xs, ys, hs)   # 재생용은 0.1 mm 로 반올림
+        busy = v["sum"]["D"] > 0
+        w = gr[(gr["kind"] == "W") & ((gr["t1"] - gr["t0"]) >= WAIT_MIN)] if busy else gr.iloc[:0]
+        v["W"] = (w["x0"].tolist(), w["y0"].tolist(), (w["t1"] - w["t0"]).tolist(), (w["t0"] - t0).tolist())
+        e = gr[gr["kind"] == "E"] if busy else gr.iloc[:0]
+        v["E"] = (e["x0"].tolist(), e["y0"].tolist(), (e["t1"] - e["t0"]).tolist())
+        pk = gr[(gr["kind"] == "T") & (np.hypot(gr["x1"] - r["park"][0], gr["y1"] - r["park"][1]) < 1.0)]
+        v["K"] = (pk["x1"].tolist(), pk["y1"].tolist(), (pk["t1"] - t0).tolist())
+        v["n_wait"], v["n_park"] = len(v["W"][0]), len(v["K"][0])
+        out.append(v)
+    return out
+
+
+@st.cache_data(ttl=600, max_entries=4, show_spinner="층마다 그림을 만드는 중…")
+def layer_frames(name: str, shape: str, set_dir: str) -> list[list[dict]] | None:
+    """재생용: 모든 층의 layer_view(쌓은 선은 3 mm 간격으로 줄임)."""
+    M = motion(name, shape, set_dir)
+    if M is None:
+        return None
+    seg, span = M["seg"], M["span"]
+    return [layer_view(seg[seg["layer"] == L], M["robots"], float(span.loc[L, "t0"]), thin=True)
+            if L in span.index else [] for L in range(M["n"])]

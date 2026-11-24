@@ -42,6 +42,9 @@ MAX_TRIES = 25      # 시작 시각 후보를 몇 개까지 시험할지
 RETRACT_R = 500.0   # 비켜 설 때 먼저 팔을 이 길이(베이스로부터)까지 당긴다
 REACH_MARGIN = 10.0
 REACH_OK = 1490.0   # 팔 길이 1500mm 에서 여유 10mm (run 에서 config 의 xy_reach_radius_mm 로 다시 맞춘다)
+REACH_LIM = 1499.0  # 국소 탐색이 옮긴 배정을 버리는 기준: 채점기 한계(팔 길이)에서 1 mm 안쪽. 배정은 REACH_OK 로
+                    # 나누지만 경계를 0.5 mm 간격으로 찾아 1,490.2 mm 같은 점은 원래 계획에도 늘 있다(공개 04).
+                    # REACH_OK 로 버리면 그런 층에서는 경계를 옮긴 시도가 모두 버려진다(연습 09·새 형상 19 이득 0).
 PRUNE_MIN_FRAC = 0.2   # 예상 완료 시각으로 가지치기할 때 최소 진행률
 PRUNE_MARGIN = 1.15    # 예상 makespan 이 최선의 이 배수를 넘어야 멈춘다
 
@@ -489,7 +492,7 @@ def _place_layer(ctx, k, paths, z, zl, P, policy=None):
         for i, q in queues.items():
             if q:
                 pts = np.vstack([ch for _, _, ch in q])[:, :2]
-                if float(np.max(np.hypot(*(pts - robots[i].base).T))) > REACH_OK:
+                if float(np.max(np.hypot(*(pts - robots[i].base).T))) > REACH_LIM:
                     raise OutOfReach(f"layer {k}: 로봇 {i + 1} 의 조각이 팔이 닿는 범위 밖")
 
     if policy is not None:                           # 층 단위 보상용 기록
@@ -752,10 +755,11 @@ class Pruned(Exception):
 def apply_config(cfg, arc: bool = False) -> None:
     """config 의 이동 속도·팔 도달 거리·비드 폭으로 모듈 상수를 맞춘다.
     속도는 채점기 허용 오차 안에서 가장 빠르게 쓴다(이동 150 → 163.5, 적층 8 → 8.72 mm/s)."""
-    global TRAVEL_V, REACH_OK
+    global TRAVEL_V, REACH_OK, REACH_LIM
     TRAVEL_V = v1.TRAVEL_V = toolpath.fast_speed(cfg, cfg.process.travel_speed_mm_s)
     reach = min(r.xy_reach_radius_mm for r in cfg.robots)
     REACH_OK = reach - REACH_MARGIN
+    REACH_LIM = reach - 1.0
     balance.REACH = reach
     toolpath.configure(cfg, arc)
 
