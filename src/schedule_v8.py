@@ -39,6 +39,9 @@ import toolpath
 DT = 0.1            # 검사 간격(s) — 채점기 max_time_step_s 와 같음
 MARGIN = 20.0       # 샘플 사이 이동(최대 150mm/s × 0.1s × 2대 / 2)을 덮는 안전 여유(mm)
 MAX_TRIES = 25      # 시작 시각 후보를 몇 개까지 시험할지
+COARSE = 10         # 충돌 검사: 이 표본 수 간격으로 먼저 성기게 재고, 그 사이는 필요한 구간만 표본마다 잰다(0=모두 잼)
+COARSE_EPS = 1e-6   # 건너뛸 때 둘 여유(mm): 하한 계산의 반올림 오차보다 넉넉히 크다
+CHECK_VERIFY = False  # (시험용) 성긴 검사의 결과를 모든 표본을 재는 검사와 견주어, 다르면 멈춘다
 RETRACT_R = 500.0   # 비켜 설 때 먼저 팔을 이 길이(베이스로부터)까지 당긴다
 REACH_MARGIN = 10.0
 REACH_OK = 1490.0   # 팔 길이 1500mm 에서 여유 10mm (run 에서 config 의 xy_reach_radius_mm 로 다시 맞춘다)
@@ -89,6 +92,11 @@ class Timeline:
 
     def __init__(self, rb):
         self.rb, self.T, self.X, self.Y, self.n = rb, [], [], [], 0
+        self.C, self.nc = [], 0       # 팔 끝이 궤적을 따라 움직인 누적 길이(mm)와, 앞에서부터 맞는 개수
+
+    def cut(self, i):
+        """i 번째 점부터 바뀌었다: 누적 길이는 그 앞까지만 맞다(T·X·Y 를 직접 고치는 곳에서 부른다)."""
+        self.nc = max(min(self.nc, i), 0)
 
     def sync(self):
         rows = self.rb.rows
@@ -96,12 +104,37 @@ class Timeline:
             # 마지막 행이 덮어써졌을 수 있음 → 마지막 행부터 다시
             self.n -= 1
             self.T.pop(); self.X.pop(); self.Y.pop()
+            self.cut(len(self.T))
         for r in rows[self.n:]:
             if self.T and r[0] <= self.T[-1]:
                 self.X[-1], self.Y[-1] = r[1], r[2]
+                self.cut(len(self.T) - 1)
                 continue
             self.T.append(r[0]); self.X.append(r[1]); self.Y.append(r[2])
         self.n = len(rows)
+
+    def _grow(self):
+        """누적 길이를 지금 궤적 끝까지 채운다(맞는 앞부분은 그대로 두고 뒤만 다시 계산)."""
+        n = len(self.T)
+        if self.nc >= n:
+            return
+        del self.C[self.nc:]
+        if not self.C:
+            self.C.append(0.0)
+        k = len(self.C)
+        if k < n:
+            dx = np.diff(np.asarray(self.X[k - 1:n], float))
+            dy = np.diff(np.asarray(self.Y[k - 1:n], float))
+            self.C.extend((self.C[-1] + np.cumsum(np.hypot(dx, dy))).tolist())
+        self.nc = n
+
+    def window(self, lo, hi):
+        """시각 lo..hi 를 덮는 구간의 (T, X, Y, 누적 길이) 배열. xy 와 같은 구간을 잘라 같은 위치 값을 낸다."""
+        self._grow()
+        i0 = max(bisect.bisect_right(self.T, lo) - 1, 0)
+        i1 = min(bisect.bisect_left(self.T, hi) + 1, len(self.T))
+        return (np.asarray(self.T[i0:i1], float), np.asarray(self.X[i0:i1], float),
+                np.asarray(self.Y[i0:i1], float), np.asarray(self.C[i0:i1], float))
 
     def xy(self, ts, lo=None, hi=None):
         lo = float(ts[0]) if lo is None else lo
@@ -205,6 +238,31 @@ def sample_plan(pts):
     return ts, xy
 
 
+def _coarse(n):
+    """표본 0..n-1 중 성기게 먼저 잴 번호: COARSE 간격 + 마지막."""
+    c = np.arange(0, n, COARSE)
+    return c if c[-1] == n - 1 else np.append(c, n - 1)
+
+
+def _inner(c, bb, kk):
+    """성긴 표본 c[b]..c[b+1] 사이(양끝 제외) 표본 번호들과, 각 표본이 속한 후보 번호(kk)를 펼친다."""
+    a = c[bb] + 1
+    cnt = c[bb + 1] - a
+    tot = int(cnt.sum())
+    if tot == 0:
+        return np.zeros(0, int), np.zeros(0, int)
+    first = np.repeat(np.cumsum(cnt) - cnt, cnt)
+    return np.repeat(a, cnt) + (np.arange(tot) - first), np.repeat(kk, cnt)
+
+
+def _at(ts, T, X, Y):
+    """Timeline.xy 와 같은 보간(이미 잘라 둔 배열로)."""
+    out = np.empty((len(ts), 2))
+    out[:, 0] = np.interp(ts, T, X)
+    out[:, 1] = np.interp(ts, T, Y)
+    return out
+
+
 class Checker:
     def __init__(self, robots, required, max_tries=MAX_TRIES, margin=MARGIN):
         self.max_tries = max_tries
@@ -219,8 +277,135 @@ class Checker:
 
     def _check(self, i, rel_ts, rel_xy, starts):
         """계획(상대 시각 rel_ts, 위치 rel_xy)을 여러 시작 시각 starts 로 옮겼을 때
-        후보마다 (충돌 없음 여부, 충돌한 로봇 집합) 을 한 번의 행렬 계산으로 구한다.
-        계획 구간 + 계획 뒤 '그 자리에 서 있는' 꼬리 구간을 모두 본다."""
+        후보마다 (충돌 없음 여부, 충돌한 로봇 집합). 계획 구간 + 계획 뒤 '그 자리에 서 있는' 꼬리 구간을 모두 본다.
+        COARSE > 1 이면 성긴 검사(_check_coarse), 아니면 모든 표본을 잰다(_check_all). 결과는 같다."""
+        if COARSE > 1:
+            r = self._check_coarse(i, rel_ts, rel_xy, starts)
+            if CHECK_VERIFY:
+                r0 = self._check_all(i, rel_ts, rel_xy, starts)
+                assert np.array_equal(r[0], r0[0]) and r[1] == r0[1], "성긴 충돌 검사의 결과가 다르다"
+            return r
+        return self._check_all(i, rel_ts, rel_xy, starts)
+
+    def _check_coarse(self, i, rel_ts, rel_xy, starts):
+        """_check_all 과 같은 결과를, 표본을 덜 재서 구한다.
+
+        팔은 고정된 베이스에서 팔 끝까지의 선분이라, 팔 끝이 δ 움직이면 그 선분의 모든 점이 δ 이하로 움직이고
+        두 팔 사이 거리도 δ 넘게 변하지 않는다. 그래서 COARSE 표본마다 먼저 재고, 이웃한 두 성긴 표본 사이
+        구간은 양끝 거리 d₁, d₂ 와 그 사이 두 팔 끝이 움직인 길이의 합 L 로 하한 (d₁ + d₂ − L)/2 를 잡는다.
+        하한이 기준 이상인 구간은 안쪽 표본이 모두 기준 이상이 보장되므로 건너뛰고, 아닌 구간만 표본마다 잰다.
+        움직인 길이는 내 계획은 표본 사이 거리의 합, 남의 궤적은 궤적을 따라 잰 누적 길이(Timeline.window)로
+        구한다. 위치·거리 계산은 _check_all 과 같은 함수·같은 구간이라 잰 표본의 값도 같다.
+        작은 배열에서는 numpy 호출 수가 시간을 좌우하므로, 다른 로봇들을 단계마다 한 번의 거리 계산으로 묶는다:
+        1) 계획 구간의 성긴 표본, 2) 그중 하한이 기준 아래인 구간의 표본, 3) 아직 충돌이 없는 후보의 꼬리 구간
+        (성긴 표본 → 필요한 표본). 이미 충돌로 정해진 후보와, 어느 후보의 판정에도 안 쓰이는 꼬리 앞부분은 재지 않는다.
+        공개 6개(2026-11-18, 코어 1개): 계획+국소 탐색 325.0 s → 208.4 s(−36%), 04 −42%, 궤적은 바이트 단위로 같다."""
+        starts = np.asarray(starts, float)
+        K, M = len(starts), len(rel_ts)
+        dur, last = rel_ts[-1], rel_xy[-1]
+        base_i = self.robots[i].base
+        req = self.req
+        lim = req + COARSE_EPS
+        times = starts[:, None] + rel_ts[None, :]                 # (후보, 표본)
+        t_ends = starts + dur
+        t0 = float(t_ends.min())
+        lo_t, hi_t = float(times.min()), float(times.max())
+        cm = _coarse(M)
+        nc = len(cm)
+        tc = times[:, cm]
+        run_i = np.concatenate([[0.0], np.cumsum(np.hypot(*np.diff(rel_xy, axis=0).T))])
+        mv_i = np.diff(run_i[cm])                                   # 성긴 구간마다 내 팔 끝이 움직인 길이
+        others = [j for j in range(len(self.robots)) if j != i]
+        bases = {j: self.robots[j].base for j in others}
+        # 1) 계획 구간(나와 상대가 함께 움직임)의 성긴 표본: 다른 로봇 모두를 한 번의 거리 계산으로
+        W = {j: self.tl[j].window(lo_t, hi_t) for j in others}
+        tcr = tc.ravel()
+        n1 = K * nc
+        dist = seg_dist(base_i, np.tile(rel_xy[cm], (len(others) * K, 1)),
+                        np.concatenate([np.broadcast_to(bases[j], (n1, 2)) for j in others]),
+                        np.concatenate([_at(tcr, W[j][0], W[j][1], W[j][2]) for j in others]))
+        bad = {}
+        F1, F0, FB, parts = [], [], [], []
+        for n, j in enumerate(others):
+            dc = dist[n * n1:(n + 1) * n1].reshape(K, nc)
+            b = (dc < req).any(axis=1)
+            if nc > 1:
+                lb = (dc[:, :-1] + dc[:, 1:] - mv_i[None, :] - np.diff(np.interp(tc, W[j][0], W[j][3]), axis=1)) * 0.5
+                kk, bb = np.nonzero((lb < lim) & ~b[:, None])       # 이미 충돌로 정해진 후보는 더 재지 않는다
+                if len(kk):
+                    m_idx, k_idx = _inner(cm, bb, kk)
+                    if len(m_idx):
+                        F1.append(rel_xy[m_idx])
+                        F0.append(np.broadcast_to(bases[j], (len(m_idx), 2)))
+                        FB.append(_at(times[k_idx, m_idx], W[j][0], W[j][1], W[j][2]))
+                        parts.append((j, k_idx))
+            bad[j] = b
+        # 2) 하한이 기준 아래인 구간의 표본만 모아 한 번 더 잰다
+        if F1:
+            df = seg_dist(base_i, np.concatenate(F1), np.concatenate(F0), np.concatenate(FB))
+            p = 0
+            for j, k_idx in parts:
+                d_ = df[p:p + len(k_idx)]
+                p += len(k_idx)
+                bad[j][k_idx[d_ < req]] = True
+        # 3) 꼬리 구간(나는 계획 끝자리에 서 있고 상대는 움직임): 아직 충돌이 없는 후보가 자기 계획을 끝낸 뒤만 본다
+        tails, A1, B0, B1 = [], [], [], []
+        for j in others:
+            tl = self.tl[j]
+            if tl.end <= t0 or bad[j].all():
+                continue
+            tt = np.arange(t0, tl.end + DT, DT)
+            m = np.searchsorted(tt, t_ends)
+            need = ~bad[j] & (m < len(tt))
+            if not need.any():
+                continue
+            m0 = int(m[need].min())                              # 이보다 앞 표본은 어느 후보의 판정에도 안 쓰인다
+            Wt = tl.window(t0, float(tt[-1]))
+            ct = m0 + _coarse(len(tt) - m0)
+            A1.append(np.broadcast_to(last, (len(ct), 2)))
+            B0.append(np.broadcast_to(bases[j], (len(ct), 2)))
+            B1.append(_at(tt[ct], Wt[0], Wt[1], Wt[2]))
+            tails.append((j, tt, m, need, m0, Wt, ct))
+        if tails:
+            dist = seg_dist(base_i, np.concatenate(A1), np.concatenate(B0), np.concatenate(B1))
+            F1, F0, FB, parts, ds = [], [], [], [], []
+            pos = 0
+            for j, tt, m, need, m0, Wt, ct in tails:
+                dct = dist[pos:pos + len(ct)]
+                pos += len(ct)
+                d = np.full(len(tt) - m0, np.inf)                   # 건너뛴 표본 = 기준 이상(값은 몰라도 됨)
+                d[ct - m0] = dct
+                if len(ct) > 1:
+                    lb = (dct[:-1] + dct[1:] - np.diff(np.interp(tt[ct], Wt[0], Wt[3]))) * 0.5
+                    bb = np.nonzero(lb < lim)[0]
+                    if len(bb):
+                        m_idx, _ = _inner(ct, bb, bb)
+                        if len(m_idx):
+                            F1.append(np.broadcast_to(last, (len(m_idx), 2)))
+                            F0.append(np.broadcast_to(bases[j], (len(m_idx), 2)))
+                            FB.append(_at(tt[m_idx], Wt[0], Wt[1], Wt[2]))
+                            parts.append((len(ds), m_idx - m0))
+                ds.append(d)
+            if F1:
+                df = seg_dist(base_i, np.concatenate(F1), np.concatenate(F0), np.concatenate(FB))
+                p = 0
+                for q, idx in parts:
+                    ds[q][idx] = df[p:p + len(idx)]
+                    p += len(idx)
+            for (j, tt, m, need, m0, Wt, ct), d in zip(tails, ds):
+                suf = np.minimum.accumulate(d[::-1])[::-1]            # 뒤쪽 최솟값
+                k_ = np.nonzero(need)[0]
+                bad[j][k_[suf[m[k_] - m0] < req]] = True
+        ok = np.ones(K, bool)
+        hit = [set() for _ in range(K)]
+        for j in others:
+            ok &= ~bad[j]
+            for k in np.nonzero(bad[j])[0]:
+                hit[k].add(j)
+        return ok, hit
+
+    def _check_all(self, i, rel_ts, rel_xy, starts):
+        """모든 표본(DT 간격)을 재는 충돌 검사: 후보마다 (충돌 없음 여부, 충돌한 로봇 집합) 을 한 번의 행렬 계산으로."""
         starts = np.asarray(starts, float)
         K, M = len(starts), len(rel_ts)
         dur, last = rel_ts[-1], rel_xy[-1]
@@ -646,6 +831,7 @@ def _restore(ctx, s):
         del tl.T[m:], tl.X[m:], tl.Y[m:]
         if last is not None:
             tl.T[-1], tl.X[-1], tl.Y[-1] = last
+        tl.cut(m - 1)
         tl.n = n
     ctx["parked"][:] = parked
     ctx["loads"][:] = loads
@@ -671,6 +857,7 @@ def _apply(ctx, s, c):
     for tl, (_, m, _), (T, X, Y, n) in zip(ctx["chk"].tl, ts, t):
         i = max(m - 1, 0)
         del tl.T[i:], tl.X[i:], tl.Y[i:]
+        tl.cut(i)
         tl.T.extend(T)
         tl.X.extend(X)
         tl.Y.extend(Y)
