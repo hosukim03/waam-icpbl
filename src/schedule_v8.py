@@ -42,6 +42,8 @@ MAX_TRIES = 25      # 시작 시각 후보를 몇 개까지 시험할지
 COARSE = 10         # 충돌 검사: 이 표본 수 간격으로 먼저 성기게 재고, 그 사이는 필요한 구간만 표본마다 잰다(0=모두 잼)
 COARSE_EPS = 1e-6   # 건너뛸 때 둘 여유(mm): 하한 계산의 반올림 오차보다 넉넉히 크다
 CHECK_VERIFY = False  # (시험용) 성긴 검사의 결과를 모든 표본을 재는 검사와 견주어, 다르면 멈춘다
+CHECKS = 0          # 지금까지 한 충돌 검사(Checker._check) 횟수. 계산량을 시간 대신 세는 단위라 어느 컴퓨터에서나
+                    # 같은 값이 나온다(solve.py 의 계산량 한도에 쓴다)
 RETRACT_R = 500.0   # 비켜 설 때 먼저 팔을 이 길이(베이스로부터)까지 당긴다
 REACH_MARGIN = 10.0
 REACH_OK = 1490.0   # 팔 길이 1500mm 에서 여유 10mm (run 에서 config 의 xy_reach_radius_mm 로 다시 맞춘다)
@@ -279,6 +281,8 @@ class Checker:
         """계획(상대 시각 rel_ts, 위치 rel_xy)을 여러 시작 시각 starts 로 옮겼을 때
         후보마다 (충돌 없음 여부, 충돌한 로봇 집합). 계획 구간 + 계획 뒤 '그 자리에 서 있는' 꼬리 구간을 모두 본다.
         COARSE > 1 이면 성긴 검사(_check_coarse), 아니면 모든 표본을 잰다(_check_all). 결과는 같다."""
+        global CHECKS
+        CHECKS += 1
         if COARSE > 1:
             r = self._check_coarse(i, rel_ts, rel_xy, starts)
             if CHECK_VERIFY:
@@ -868,6 +872,22 @@ def _apply(ctx, s, c):
     ctx["lab"] = lab
 
 
+def _ls_ok(ctx) -> bool:
+    """국소 탐색 계산량 한도 안에서 한 번 더 다시 계획해 볼 수 있는가(한도가 없으면 늘 된다)."""
+    left = ctx.get("ls_left")
+    if left is None:
+        return True
+    return left > 0 and (ctx.get("ls_rate") is None or ctx["ls_credit"] > 0)
+
+
+def _ls_spend(ctx, c0) -> None:
+    """다시 계획 한 번에 쓴 충돌 검사 횟수(지금 CHECKS − c0)를 한도에서 뺀다."""
+    if ctx.get("ls_left") is not None:
+        used = CHECKS - c0
+        ctx["ls_left"] -= used
+        ctx["ls_credit"] -= used
+
+
 def _place_ls(ctx, k, paths, z, zl, P, policy, budget, step=LS_STEP, warm=False):
     """국소 탐색으로 한 층을 계획한다. 먼저 그대로 계획하고, 가장 늦게 끝난 로봇의 부채꼴 경계를 step 만큼
     안쪽으로 옮겨(그 로봇 몫을 이웃에게 조금 넘겨) 그 층만 다시 계획해 본다. 층이 더 일찍 끝나면 받아들이고
@@ -877,11 +897,17 @@ def _place_ls(ctx, k, paths, z, zl, P, policy, budget, step=LS_STEP, warm=False)
     (연습 09·새 형상 19: 층마다 마지막 로봇이 평균보다 늦게 끝난 시간을 더하면 makespan 의 24~29%).
     실제로 계획해 보고 고르면 그 차이를 줄일 수 있다. 층 하나만 다시 계획하므로 그 층이 나빠지는 일은 없다
     (다음 층에는 영향이 갈 수 있다). 부채꼴 배정을 쓰지 않는 층(1대, 섬 배분, --no-balance)은 그대로 둔다.
-    warm: 아래층에서 받아들인 경계 이동을 먼저 시험한다(이것도 다시 계획 한 번으로 센다)."""
+    warm: 아래층에서 받아들인 경계 이동을 먼저 시험한다(이것도 다시 계획 한 번으로 센다).
+    계산량 한도(ctx["ls_left"]): 다시 계획하는 데 쓴 충돌 검사 횟수를 빼 나가다가 0 이하가 되면 더는 다시 계획하지
+    않는다(기준 계획만 한다). ls_rate 가 있으면 층 몫(그 층 기준 계획에 든 검사 횟수 × ls_rate, 안 쓴 몫은 위층으로
+    넘어감)이 남아 있을 때만 다시 계획한다. 시간이 아니라 횟수로 세므로 어느 컴퓨터에서나 같은 곳에서 멈춘다."""
     s0 = _snap(ctx)
+    c_base = CHECKS
     y = _place_layer(ctx, k, paths, z, zl, P, policy)
     if ctx["lab"] is None or ctx["lab"][0].bounds is None or budget <= 0:
         return y
+    if ctx.get("ls_rate") is not None:                   # 층마다 기준 계획에 든 검사 횟수에 비례해 몫을 준다
+        ctx["ls_credit"] += ctx["ls_rate"] * (CHECKS - c_base)
     lab, rid = ctx["lab"]
     nb, n = len(rid), len(lab.order)
     best = (max(rb.t for rb in ctx["robots"]), _capture(ctx, s0), y)
@@ -889,20 +915,22 @@ def _place_ls(ctx, k, paths, z, zl, P, policy, budget, step=LS_STEP, warm=False)
     fin = [rb.t for rb in ctx["robots"]]
     key = (nb, tuple(int(o) for o in lab.order))
     prev = ctx.setdefault("ls_prev", {}).get(key) if warm else None
-    if prev:
+    if prev and _ls_ok(ctx):
         # 아래층에서 받아들인 경계 이동부터 시험한다. 이웃한 층은 단면이 비슷해 같은 이동이 또 통하는 일이 많고
         # (새 형상 19·새 방식 17 은 나아진 층의 절반), 거기서 더 옮겨 볼 수 있어 횟수 안에서 더 멀리 간다.
         _restore(ctx, s0)
         tries += 1
+        c1 = CHECKS
         try:
             y2 = _place_layer(ctx, k, paths, z, zl, dict(P, shift={nb: prev}), policy)
         except OutOfReach:
             y2 = None
+        _ls_spend(ctx, c1)
         e2 = max(rb.t for rb in ctx["robots"]) if y2 is not None else float("inf")
         if e2 < best[0] - 1e-6:
             best, cur = (e2, _capture(ctx, s0), y2), dict(prev)
             fin = [rb.t for rb in ctx["robots"]]
-    while tries < budget:
+    while tries < budget and _ls_ok(ctx):
         li = max(range(nb), key=lambda q: fin[rid[q]])        # 가장 늦게 끝난 로봇(배정기 안 번호)
         m = lab.order.index(li)
         # 그 로봇 몫을 줄이는 두 방향: 위쪽 경계 m 을 내리거나 아래쪽 경계 m-1 을 올린다. 일찍 끝난 이웃 쪽부터.
@@ -911,16 +939,19 @@ def _place_ls(ctx, k, paths, z, zl, P, policy, budget, step=LS_STEP, warm=False)
             moves.reverse()
         improved = False
         for bk, d in moves:
-            if tries >= budget:
+            if tries >= budget or not _ls_ok(ctx):
                 break
             trial = dict(cur)
             trial[bk] = trial.get(bk, 0.0) + d
             _restore(ctx, s0)
             tries += 1
+            c1 = CHECKS
             try:
                 y2 = _place_layer(ctx, k, paths, z, zl, dict(P, shift={nb: trial}), policy)
             except OutOfReach:                         # 팔이 안 닿는 조각이 생기는 이동은 버린다
                 continue
+            finally:
+                _ls_spend(ctx, c1)
             e2 = max(rb.t for rb in ctx["robots"])
             if e2 < best[0] - 1e-6:
                 best, cur, improved = (e2, _capture(ctx, s0), y2), trial, True
@@ -960,10 +991,12 @@ def prepare(job: Path):
     return cfg, n, slice_target_layers(mesh, list(range(n)), cfg)
 
 
-def run(job: Path, opts, policy=None, pre=None, path_cache=None, only=None, bound=None):
+def run(job: Path, opts, policy=None, pre=None, path_cache=None, only=None, bound=None, work_cap=None):
     """pre = prepare() 결과(없으면 여기서 읽는다), path_cache = {층: (경로, IoU)},
     only = 이 층들만 계획한다(설정을 짧게 시험할 때), bound = 이미 끝난 설정의 최선 makespan(가지치기,
-    --bound-file 과 같은 규칙). 나머지는 명령행 실행과 같다."""
+    --bound-file 과 같은 규칙), work_cap = 이 계획에 쓸 충돌 검사 횟수 한도(넘으면 층을 시작할 때 Pruned 로
+    멈춘다, 계산량 한도). 나머지는 명령행 실행과 같다."""
+    c_run = CHECKS
     cfg, n, layers = pre if pre is not None else prepare(job)
     apply_config(cfg, bool(opts.arc))
     pr = cfg.process
@@ -988,9 +1021,12 @@ def run(job: Path, opts, policy=None, pre=None, path_cache=None, only=None, boun
     ls = int(getattr(opts, "ls", 0) or 0)                # 국소 탐색: 층마다 다시 계획해 볼 최대 횟수(0=안 함)
     ls_step = float(getattr(opts, "ls_step", LS_STEP) or LS_STEP)
     ls_warm = bool(getattr(opts, "ls_warm", False))
+    ls_budget = getattr(opts, "ls_budget", None)         # 국소 탐색에서 다시 계획하는 데 쓸 충돌 검사 횟수(None=한도 없음)
+    ls_rate = getattr(opts, "ls_rate", None)             # 층 몫 = 그 층 기준 계획의 검사 횟수 × 이 값(None=아래층부터 씀)
     loads = np.zeros(3)                                  # 로봇별 누적 적층 시간(정책 특징)
 
-    ctx = {"robots": robots, "chk": chk, "parked": parked, "loads": loads, "first": True}
+    ctx = {"robots": robots, "chk": chk, "parked": parked, "loads": loads, "first": True,
+           "ls_left": None if ls_budget is None else float(ls_budget), "ls_rate": ls_rate, "ls_credit": 0.0}
     P = {"opts": opts, "arc_on": arc_on, "arc_off": arc_off, "vd": vd,
          "band_dir": band_dir, "nrob": nrob, "w_over": w_over, "retract": retract,
          "order2": bool(getattr(opts, "order2", False)),
@@ -1017,6 +1053,8 @@ def run(job: Path, opts, policy=None, pre=None, path_cache=None, only=None, boun
         A = layers[k]
         if A.is_empty or (only is not None and k not in only):
             continue
+        if work_cap is not None and CHECKS - c_run > work_cap:
+            raise Pruned(f"layer {k}: 충돌 검사 {CHECKS - c_run} > 한도 {work_cap:.0f}")
         if bound_file or bound is not None:
             # 가지치기: 포트폴리오에서 먼저 끝난 설정의 makespan 이 여기 적힌다. 지금 로봇 시각이 이미
             # 그보다 크면 이 설정은 절대 이길 수 없으므로(시각은 줄지 않음) 바로 멈춘다. 결과는 그대로.
@@ -1146,6 +1184,11 @@ def parser() -> argparse.ArgumentParser:
                     help="국소 탐색에서 경계를 한 번에 옮기는 폭(이웃 로봇 방향 사이 각도의 비율)")
     ap.add_argument("--ls-warm", dest="ls_warm", action="store_true",
                     help="국소 탐색에서 아래층이 받아들인 경계 이동을 먼저 시험한다")
+    ap.add_argument("--ls-budget", dest="ls_budget", type=float, default=None,
+                    help="국소 탐색 계산량 한도: 다시 계획하는 데 쓸 충돌 검사 횟수(기본 한도 없음)")
+    ap.add_argument("--ls-rate", dest="ls_rate", type=float, default=None,
+                    help="국소 탐색 한도를 아래층부터 쓰지 않고 층마다 그 층 기준 계획 검사 횟수 × 이 값씩 나눠 준다"
+                         "(solve.py 는 남은 몫 ÷ 고른 설정을 한 번 계획하는 데 든 검사 횟수를 넣는다)")
     ap.add_argument("--policy", default=None, help="ppo_policy.py 로 학습한 정책(.npz)")
     ap.add_argument("--debug", action="store_true")
     return ap
