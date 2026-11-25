@@ -89,6 +89,9 @@
 - `v0/` 코드를 역할별로 나눴다: 제출에 쓰는 코드 9개는 `src/`, 평가·형상 생성·분석·그림은 `tools/`, RL·튜닝·예전 스케줄러는 `experiments/`, 기능 변경 전 백업(`*_pre_*`)과 옛 실행 스크립트는 `archive/`. 공개 6개 출력은 바이트 단위로 동일.
 
 ### Fixed
+- 코랩 노트북(`tools/colab_run.ipynb`)의 채점 칸을 같은 런타임에서 두 번째로 돌리면 6개가 모두 `OUTPUT_WRITE_FAILED`
+  (Explicit output directory is not empty)로 끝나던 문제. 채점기는 이미 차 있는 폴더에 쓰지 않으므로, 돌릴 때마다 새
+  폴더(`/content/out/_val_시분초`)에 채점한다.
 - Python 3.11 + numpy 2 에서 로봇 2대가 엇갈려 쌓는 설정(`sp_r2c160m5a`·`sp_r2c160m5arp`·`sp_r2c80m5a`)이 지나는 층에서
   `TypeError: 'numpy.bool' object cannot be interpreted as an integer` 로 풀이 전체가 멈추던 문제(그 형상은 결과가
   나오지 않는다). 로봇 번호가 numpy 정수면 띠 진행 방향이 numpy.bool 이 되는데, 3.11 의 `sorted(reverse=...)` 는 그것을
