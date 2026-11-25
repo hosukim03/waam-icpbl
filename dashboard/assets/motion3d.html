@@ -78,7 +78,7 @@ const layout = {
   paper_bgcolor: "rgba(0,0,0,0)", margin: { l: 0, r: 0, t: 0, b: 0 }, showlegend: true,
   legend: { orientation: "h", x: 0, y: 1, font: { color: P.ink2 } }, uirevision: "keep",
   scene: { xaxis: ax("X (mm)", [-lim, lim]), yaxis: ax("Y (mm)", [-lim, lim]), zaxis: ax("Z (mm)", [0, TOPZ]),
-    aspectmode: "manual", aspectratio: { x: 1, y: 1, z: Math.max(0.28, TOPZ / (2 * lim)) },
+    aspectmode: "manual", aspectratio: { x: 1, y: 1, z: TOPZ / (2 * lim) },   // 높이도 실제 비율(늘리지 않음)
     dragmode: false,                               // 끌기는 아래에서 직접 다룬다(재생 중 다시 그려도 끊기지 않게)
     camera: { eye: { x: 0.48, y: -0.62, z: 0.38 }, center: { x: 0, y: 0, z: -0.1 } } },
   font: { family: "Pretendard, Malgun Gothic, sans-serif" } };

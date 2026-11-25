@@ -167,9 +167,6 @@ spot = c2.selectbox("자리로 확대 (그 층의 큰 조각부터)", [-1] + lis
 show_path = c3.toggle("불 켜고 지나간 길", value=True)
 M = target_mesh(e["set_dir"], sh)
 rng = [float(np.ptp(M[a])) if M is not None else 1.0 for a in "xyz"]
-flat = rng[2] / max(rng) < 0.18                             # 넓적한 형상은 층이 안 보이니 높이를 늘려 볼 수 있게
-tall = c3.toggle("높이 늘려 보기 (3D)", value=flat, disabled=not flat,
-                 help="넓적한 형상은 실제 비율이면 층이 얇아 안 보여서, 높이를 넓이의 18% 까지 늘려 그립니다.")
 G = shape_view_layer(e["name"], sh, L, mt)
 
 
@@ -251,15 +248,13 @@ if G is not None:
 ax3 = dict(backgroundcolor="rgba(0,0,0,0)", gridcolor=P["grid"], zerolinecolor=P["grid"], color=P["muted"],
            showspikes=False)
 m = max(rng)
-zr = max(rng[2] / m, 0.18) if tall else rng[2] / m
-k_up = zr / (rng[2] / m) if rng[2] > 0 else 1.0
-style(f3, height=640, legend=True,
-      title="실제 형상에서 본 빈틈·넘침 자리" + (f" (높이 ×{k_up:.1f} 로 늘려 그림)" if k_up > 1.05 else ""))
+zr = max(rng[2] / m, 1e-3)                                  # 높이도 실제 비율(늘리지 않음)
+style(f3, height=640, legend=True, title="실제 형상에서 본 빈틈·넘침 자리")
 f3.update_layout(scene=dict(xaxis=dict(title="x (mm)", **ax3), yaxis=dict(title="y (mm)", **ax3),
                             zaxis=dict(title="z (mm)", **ax3), aspectmode="manual",
                             aspectratio=dict(x=rng[0] / m, y=rng[1] / m, z=zr),
                             camera=dict(eye=dict(x=0.95, y=-1.3, z=0.8), center=dict(x=0, y=0, z=-0.12))),
-                 uirevision=f"{e['name']}/{sh}/{tall}", margin=dict(l=0, r=0, t=40, b=0),
+                 uirevision=f"{e['name']}/{sh}", margin=dict(l=0, r=0, t=40, b=0),
                  legend=dict(orientation="h", yanchor="top", y=-0.02, xanchor="left", x=0, font=dict(color=P["ink2"])))
 with left:
     st.plotly_chart(f3, width="stretch", theme=None, key="sv3d", config={"displaylogo": False})
