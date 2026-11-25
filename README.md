@@ -143,7 +143,8 @@ docs/             설계 문서(DESIGN.md), 용어집, 알고리즘 수도 코�
 data/             시나리오 형상 (git 미추적, 만드는 방법은 data/README.md)
 src/              제출에 쓰는 코드 (경로 생성·스케줄러·설정 고르기·제출기)
 tools/            평가·측정·형상 생성·분석·그림 스크립트
-dashboard/        개발 대시보드 (streamlit run dashboard/app.py, 자료는 tools/collect_evals.py 가 runs/ 에 모은 것)
+dashboard/        개발 대시보드 (streamlit run dashboard/app.py, 자료는 tools/collect_evals.py 가 runs/ 에 모은 것,
+                  층별 점검의 '형상에서 보기' 자료는 tools/shape_diff.py 가 만든 것)
 experiments/      RL·튜닝·예전 버전 스케줄러 (기록용, 그대로는 실행되지 않을 수 있음)
 archive/          기능을 바꾸기 전 백업과 옛 실행 스크립트 (기록용)
 results/          평가 결과 CSV, results/logs/ 평가 로그

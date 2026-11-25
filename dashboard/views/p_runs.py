@@ -17,7 +17,8 @@ labels = dict(zip(idx["set"], idx["set_label"]))
 f1, f2 = st.columns([2, 3])
 s = f1.radio("묶음", sets, format_func=labels.get, horizontal=True)
 g = idx[idx["set"] == s].sort_values("name")
-e = f2.selectbox("실험", g.to_dict("records"), index=len(g) - 1, format_func=lambda r: f"{r['exp']} — {r['desc']}")
+e = f2.selectbox("실험", g.to_dict("records"), index=len(g) - 1, format_func=lambda r: f"{r['exp']} — {r['desc']}",
+                 key=f"exp_{s}")
 st.caption(f"**{labels[s]}**: {SET_NOTE.get(s, '')}")
 t = run_table(e["name"], e["set_dir"])
 

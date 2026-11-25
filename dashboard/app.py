@@ -32,7 +32,8 @@ page = st.navigation({
               st.Page("views/p_compare.py", title="실험 비교", icon="🔁"),
               st.Page("views/p_timing.py", title="계산 시간 (코어 1개)", icon="⏱"),
               st.Page("views/p_layers.py", title="층별 점검", icon="🧱"),
-              st.Page("views/p_motion.py", title="움직임 그림", icon="🧭")],
+              st.Page("views/p_motion.py", title="움직임 그림", icon="🧭"),
+              st.Page("views/p_gantt.py", title="작업 일정(간트)", icon="📊")],
     "형상": [st.Page("views/p_shapes.py", title="형상 그림", icon="🖼")],
 }, expanded=True)
 with st.sidebar:

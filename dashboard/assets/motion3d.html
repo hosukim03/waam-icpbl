@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<style>
+  :root { --ink: __INK__; --ink2: __INK2__; --muted: __MUTED__; --grid: __GRID__; --surface: __SURFACE__; --accent: __ACCENT__; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: transparent; color: var(--ink2); font-family: Pretendard, "Malgun Gothic", system-ui, sans-serif; font-size: 14px; }
+  #ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 4px 2px 8px; }
+  button, select { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--grid); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button#play { min-width: 92px; font-weight: 600; }
+  label { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+  #clock { margin-left: auto; color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+  #tm { width: 100%; accent-color: var(--accent); margin: 0 0 6px; }
+  #st { display: flex; flex-wrap: wrap; gap: 6px 14px; min-height: 22px; color: var(--ink2); font-size: 13px; }
+  #st b { font-weight: 600; } #st i { font-style: normal; color: var(--muted); }
+  #g { width: 100%; height: 680px; }
+  #view { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 8px 2px 2px; }
+  #view button { padding: 5px 11px; }
+  #view button.on { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  #help { color: var(--muted); font-size: 12.5px; }
+</style></head>
+<body>
+<div id="ctl">
+  <button id="play">▶ 재생</button>
+  <label>속도 <select id="spd">
+    <option value="1">1배 (실제 시간)</option><option value="10">10배</option>
+    <option value="30" selected>30배 (한 장 = 1초)</option><option value="60">60배</option>
+    <option value="120">120배</option><option value="300">300배</option></select></label>
+  <label>층으로 가기 <select id="lay"></select></label>
+  <span id="clock"></span>
+</div>
+<input id="tm" type="range" min="0" step="1" value="0">
+<div id="st"></div>
+<div id="view">
+  <button id="v_obl">비스듬히</button><button id="v_top">위에서</button><button id="v_side">옆에서</button>
+  <button id="spin">⟳ 360° 돌기</button>
+  <span id="help">왼쪽 버튼 끌기 = 360° 회전 · 오른쪽 버튼(또는 Shift) 끌기 = 옆으로 이동 · 휠 = 확대·축소 · 재생 중에도 됩니다</span>
+</div>
+<div id="g"></div>
+__PLOTLY__
+<script>
+const D = __DATA__;
+const COL = __COLORS__;
+const P = __PAL__;
+const R = D.robots, NL = D.levels.length, N = R[0].x.length, T = D.T;
+const MODE = ["쌓기", "이동", "기다리기", "끝남"];
+const lim = 1550, TOPZ = D.zmax + 180;          // 베이스는 작업대 중심에서 1,400 mm 밖이라 범위를 넓게 잡는다
+const g = document.getElementById("g"), tm = document.getElementById("tm"), clock = document.getElementById("clock");
+const st = document.getElementById("st"), playBtn = document.getElementById("play"), spd = document.getElementById("spd");
+tm.max = Math.floor(T);
+
+function ub(a, t) { let lo = 0, hi = a.length; while (lo < hi) { const m = (lo + hi) >> 1; if (a[m] <= t) lo = m + 1; else hi = m; } return lo; }
+function layerAt(t) { const k = ub(D.starts, t) - 1; return Math.max(0, Math.min(NL - 1, k)); }
+function hms(s) { s = Math.max(0, Math.round(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), r = s % 60;
+  return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(r).padStart(2, "0"); }
+
+// 바탕: 작업대 원, 로봇 기둥(베이스에서 위로). 움직이는 것: 로봇마다 지난 층 쌓은 선, 이 층 쌓은 선, 팔, 토치
+const th = [...Array(121).keys()].map(i => i / 120 * 2 * Math.PI);
+const traces = [{ type: "scatter3d", mode: "lines", x: th.map(a => D.work_r * Math.cos(a)), y: th.map(a => D.work_r * Math.sin(a)),
+  z: th.map(() => 0), line: { color: P.axis, width: 3, dash: "dash" }, hoverinfo: "skip", showlegend: false }];
+R.forEach((r, i) => traces.push({ type: "scatter3d", mode: "lines", x: [r.base[0], r.base[0]], y: [r.base[1], r.base[1]], z: [0, TOPZ],
+  line: { color: COL[i], width: 10 }, name: "로봇 " + r.id, legendgroup: "r" + r.id, hoverinfo: "name" }));
+const dyn = [];
+R.forEach((r, i) => {
+  const grp = "r" + r.id;
+  dyn.push(traces.length); traces.push({ type: "scatter3d", mode: "lines", x: [], y: [], z: [], line: { color: COL[i], width: 2 },
+    opacity: 0.45, legendgroup: grp, showlegend: false, hoverinfo: "skip" });
+  dyn.push(traces.length); traces.push({ type: "scatter3d", mode: "lines", x: [], y: [], z: [], line: { color: COL[i], width: 5 },
+    legendgroup: grp, showlegend: false, hoverinfo: "skip" });
+  dyn.push(traces.length); traces.push({ type: "scatter3d", mode: "lines", x: [], y: [], z: [], line: { color: COL[i], width: 4 },
+    opacity: 0.85, legendgroup: grp, showlegend: false, hoverinfo: "skip" });
+  dyn.push(traces.length); traces.push({ type: "scatter3d", mode: "markers", x: [], y: [], z: [],
+    marker: { color: COL[i], size: 7, symbol: "circle", line: { color: P.surface, width: 1 } },
+    legendgroup: grp, showlegend: false, hovertemplate: "로봇 " + r.id + "<extra></extra>" });
+});
+const ax = (title, range) => ({ title: { text: title, font: { color: P.ink2 } }, range, gridcolor: P.grid, zerolinecolor: P.axis,
+  showbackground: false, tickfont: { color: P.muted } });
+const layout = {
+  paper_bgcolor: "rgba(0,0,0,0)", margin: { l: 0, r: 0, t: 0, b: 0 }, showlegend: true,
+  legend: { orientation: "h", x: 0, y: 1, font: { color: P.ink2 } }, uirevision: "keep",
+  scene: { xaxis: ax("X (mm)", [-lim, lim]), yaxis: ax("Y (mm)", [-lim, lim]), zaxis: ax("Z (mm)", [0, TOPZ]),
+    aspectmode: "manual", aspectratio: { x: 1, y: 1, z: Math.max(0.28, TOPZ / (2 * lim)) },
+    dragmode: false,                               // 끌기는 아래에서 직접 다룬다(재생 중 다시 그려도 끊기지 않게)
+    camera: { eye: { x: 0.48, y: -0.62, z: 0.38 }, center: { x: 0, y: 0, z: -0.1 } } },
+  font: { family: "Pretendard, Malgun Gothic, sans-serif" } };
+
+let tau = 0, playing = false, lastL = -1, lastDraw = 0, prev = null;
+function arm(r, x, y, z) { return { x: [r.base[0], x], y: [r.base[1], y], z: [TOPZ, z] }; }
+
+function draw(force) {
+  const f = Math.min(N - 1, Math.max(0, Math.floor(tau))), a = Math.min(1, tau - f), f2 = Math.min(N - 1, f + 1);
+  const L = layerAt(tau);
+  const X = [], Y = [], Z = [], idx = [], sym = [], size = [];
+  const status = [];
+  R.forEach((r, i) => {
+    const x = r.x[f] + (r.x[f2] - r.x[f]) * a, y = r.y[f] + (r.y[f2] - r.y[f]) * a, z = r.z[f] + (r.z[f2] - r.z[f]) * a;
+    const md = r.m[f], k = ub(r.vt, tau), s0 = Math.min(r.first[L] || 0, k);
+    if (L !== lastL || force) {                                        // 지난 층들: 층이 바뀔 때만 다시 그린다
+      X.push(r.vx.slice(0, s0)); Y.push(r.vy.slice(0, s0)); Z.push(r.vz.slice(0, s0)); idx.push(dyn[4 * i]);
+    }
+    const cx = r.vx.slice(s0, k), cy = r.vy.slice(s0, k), cz = r.vz.slice(s0, k);
+    if (md === 0) { cx.push(x); cy.push(y); cz.push(z); }             // 쌓는 중이면 토치까지 이어 그린다
+    X.push(cx); Y.push(cy); Z.push(cz); idx.push(dyn[4 * i + 1]);
+    const A = arm(r, x, y, z); X.push(A.x); Y.push(A.y); Z.push(A.z); idx.push(dyn[4 * i + 2]);
+    X.push([x]); Y.push([y]); Z.push([z]); idx.push(dyn[4 * i + 3]);
+    sym.push(md === 0 ? "circle" : md === 1 ? "diamond-open" : md === 2 ? "x" : "square-open");
+    size.push(md === 0 ? 8 : 6);
+    status.push(`<span><b style="color:${COL[i]}">로봇 ${r.id}</b> ${MODE[md]}</span>`);
+  });
+  if (g.layout && g.layout.scene && typeof cam === "function") g.layout.scene.camera = cam();   // 다시 그려도 지금 시점 유지
+  Plotly.restyle(g, { x: X, y: Y, z: Z }, idx);
+  Plotly.restyle(g, { "marker.symbol": sym, "marker.size": size }, R.map((_, i) => dyn[4 * i + 3]));
+  lastL = L;
+  clock.textContent = `${hms(tau)}  (${Math.floor(tau).toLocaleString()} s / ${Math.floor(T).toLocaleString()} s)`;
+  st.innerHTML = `<span><i>층</i> <b>${L + 1} / ${NL}</b></span>` + status.join("");
+  if (document.activeElement !== tm) tm.value = Math.floor(tau);
+  document.getElementById("lay").value = String(L);
+}
+
+function loop(now) {
+  if (!playing) return;
+  if (prev !== null) tau = Math.min(T, tau + (now - prev) / 1000 * Number(spd.value));
+  prev = now;
+  if (now - lastDraw > 45 || tau >= T) { draw(false); lastDraw = now; }
+  if (tau >= T) { setPlay(false); return; }
+  requestAnimationFrame(loop);
+}
+function setPlay(on) {
+  playing = on; prev = null; playBtn.textContent = on ? "⏸ 멈춤" : "▶ 재생";
+  if (on) { if (tau >= T) { tau = 0; lastL = -1; } requestAnimationFrame(loop); }
+}
+playBtn.onclick = () => setPlay(!playing);
+tm.oninput = () => { tau = Number(tm.value); draw(true); };
+const lay = document.getElementById("lay");
+D.starts.forEach((s, L) => { const o = document.createElement("option"); o.value = String(L); o.textContent = `${L + 1}층 (${hms(s)})`; lay.appendChild(o); });
+lay.onchange = () => { tau = D.starts[Number(lay.value)]; draw(true); };
+
+// ---------------- 시점 다루기: 마우스 끌기·휠, 정해 둔 시점, 360° 돌기
+const VIEWS = {
+  obl: { eye: { x: 0.48, y: -0.62, z: 0.38 }, center: { x: 0, y: 0, z: -0.1 }, up: { x: 0, y: 0, z: 1 } },
+  top: { eye: { x: 0, y: -0.001, z: 1.1 }, center: { x: 0, y: 0, z: -0.1 }, up: { x: 0, y: 1, z: 0 } },
+  side: { eye: { x: 0, y: -1.05, z: 0.08 }, center: { x: 0, y: 0, z: -0.1 }, up: { x: 0, y: 0, z: 1 } } };
+function cam() {                                // 마우스로 막 돌린 시점까지 반영된 지금 카메라
+  const sc = g._fullLayout && g._fullLayout.scene;
+  const live = sc && sc._scene && sc._scene.getCamera ? sc._scene.getCamera() : null;
+  const c = live || (sc && sc.camera) || layout.scene.camera;
+  return JSON.parse(JSON.stringify({ eye: c.eye, center: c.center, up: c.up || { x: 0, y: 0, z: 1 } }));
+}
+function setCam(c) { return Plotly.relayout(g, { "scene.camera": c }); }
+// 마우스 끌기를 직접 받아 시점을 바꾼다: 왼쪽 = 세로축 둘레 회전(360°)과 기울이기, 오른쪽·Shift = 평행 이동
+let drag = null, pendingCam = null;
+function camFromDrag(d, dx, dy) {
+  const c = JSON.parse(JSON.stringify(d.c0));
+  const v = { x: c.eye.x - c.center.x, y: c.eye.y - c.center.y, z: c.eye.z - c.center.z };
+  const r = Math.hypot(v.x, v.y, v.z) || 1;
+  if (d.mode === "rot") {
+    const az = Math.atan2(v.y, v.x) - dx * 0.008;
+    const el = Math.max(-1.45, Math.min(1.45, Math.asin(Math.max(-1, Math.min(1, v.z / r))) + dy * 0.008));
+    c.eye = { x: c.center.x + r * Math.cos(el) * Math.cos(az), y: c.center.y + r * Math.cos(el) * Math.sin(az),
+              z: c.center.z + r * Math.sin(el) };
+    c.up = { x: 0, y: 0, z: 1 };
+  } else {
+    const f = { x: -v.x / r, y: -v.y / r, z: -v.z / r };          // 보는 방향
+    let rx = f.y, ry = -f.x, rz = 0;                                 // 화면 오른쪽 = 보는 방향 × 위(z)
+    const rn = Math.hypot(rx, ry) || 1; rx /= rn; ry /= rn;
+    const ux = ry * f.z - rz * f.y, uy = rz * f.x - rx * f.z, uz = rx * f.y - ry * f.x;   // 화면 위쪽
+    const s = r * 0.0016, sx = (-dx * rx + dy * ux) * s, sy = (-dx * ry + dy * uy) * s, sz = (dy * uz) * s;
+    ["eye", "center"].forEach(k => { c[k] = { x: c[k].x + sx, y: c[k].y + sy, z: c[k].z + sz }; });
+  }
+  return c;
+}
+g.addEventListener("pointerdown", e => {
+  drag = { x: e.clientX, y: e.clientY, c0: cam(), raf: 0,
+           mode: (e.button === 2 || e.shiftKey) ? "pan" : "rot" };
+  try { g.setPointerCapture(e.pointerId); } catch (_) {}
+  e.preventDefault(); e.stopPropagation();
+}, true);
+g.addEventListener("pointermove", e => {
+  if (!drag) return;
+  pendingCam = camFromDrag(drag, e.clientX - drag.x, e.clientY - drag.y);
+  if (!drag.raf) drag.raf = requestAnimationFrame(() => { if (drag) drag.raf = 0; if (pendingCam) { setCam(pendingCam); pendingCam = null; } });
+  e.preventDefault(); e.stopPropagation();
+}, true);
+window.addEventListener("pointerup", () => { if (drag) { if (pendingCam) { setCam(pendingCam); pendingCam = null; } drag = null; } }, true);
+g.addEventListener("contextmenu", e => e.preventDefault());
+g.addEventListener("wheel", e => { e.preventDefault(); e.stopPropagation(); zoom(e.deltaY < 0 ? 0.88 : 1.14); },
+                   { capture: true, passive: false });
+function zoom(k) {
+  const c = cam();
+  ["x", "y", "z"].forEach(a => { c.eye[a] = c.center[a] + (c.eye[a] - c.center[a]) * k; });
+  setCam(c);
+}
+document.getElementById("v_obl").onclick = () => setCam(JSON.parse(JSON.stringify(VIEWS.obl)));
+document.getElementById("v_top").onclick = () => setCam(JSON.parse(JSON.stringify(VIEWS.top)));
+document.getElementById("v_side").onclick = () => setCam(JSON.parse(JSON.stringify(VIEWS.side)));
+let spinning = false, spinLast = 0;
+const spinBtn = document.getElementById("spin");
+function spinLoop(now) {
+  if (!spinning) return;
+  if (now - spinLast > 40) {                                 // 가운데 세로축을 중심으로 시점을 조금씩 돌린다
+    const c = cam(), a = 0.015, dx = c.eye.x - c.center.x, dy = c.eye.y - c.center.y;
+    c.eye.x = c.center.x + dx * Math.cos(a) - dy * Math.sin(a);
+    c.eye.y = c.center.y + dx * Math.sin(a) + dy * Math.cos(a);
+    setCam(c);
+    spinLast = now;
+  }
+  requestAnimationFrame(spinLoop);
+}
+spinBtn.onclick = () => {
+  spinning = !spinning;
+  spinBtn.classList.toggle("on", spinning);
+  spinBtn.textContent = spinning ? "⏹ 돌기 멈춤" : "⟳ 360° 돌기";
+  if (spinning) requestAnimationFrame(spinLoop);
+};
+
+Plotly.newPlot(g, traces, layout, { responsive: true, displaylogo: false, displayModeBar: false, scrollZoom: false })
+  .then(() => draw(true));
+</script>
+</body></html>

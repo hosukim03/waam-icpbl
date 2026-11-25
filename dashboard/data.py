@@ -219,6 +219,60 @@ def motion(name: str, shape: str, set_dir: str) -> dict | None:
             "work_r": float(cfg.get("workspace", {}).get("radius_mm", 700.0))}
 
 
+@st.cache_data(ttl=600, max_entries=4, show_spinner="3D 재생 자료를 만드는 중…")
+def timeline3d(name: str, shape: str, set_dir: str, tol: float = 5.0) -> dict | None:
+    """3D 시간 재생용 자료. 로봇마다 1초 간격의 토치 위치와 그 순간 동작(0 쌓기, 1 이동, 2 기다리기, 3 끝남),
+    쌓은 선의 꼭짓점(tol mm 간격으로 줄임, 끊긴 곳은 None, 시각은 앞 꼭짓점과 같게 두어 늘 커지게),
+    층마다 그 로봇의 첫 꼭짓점 번호, 층이 시작하는 시각(그 높이에서 처음 쌓은 시각)."""
+    import numpy as np
+    import yaml
+    d = RUNS / "evals" / name / shape
+    p = d / "trajectory.csv.gz"
+    if not p.exists():
+        return None
+    cfg_p = d / "config.yaml" if (d / "config.yaml").exists() else ROOT / set_dir / shape / "config.yaml"
+    cfg = yaml.safe_load(cfg_p.read_text(encoding="utf-8"))
+    df = pd.read_csv(p)
+    T = float(df["time_s"].max())
+    ts = np.arange(0.0, np.ceil(T) + 1.0, 1.0)
+    dep = df[df["mode"] == "D"]
+    levels = np.unique(np.round(dep["z_mm"].to_numpy(), 3))
+    zr = np.round(dep["z_mm"].to_numpy(), 3)
+    starts = [float(dep["time_s"].to_numpy()[zr == z0].min()) for z0 in levels]
+    code = {"D": 0, "T": 1, "W": 2}
+    out, zmax = [], float(df["z_mm"].max())
+    for r in sorted(cfg["robots"], key=lambda r: r["id"]):
+        g = df[df["robot_id"] == r["id"]]
+        t, x, y, z = (g[c].to_numpy(float) for c in ("time_s", "x_mm", "y_mm", "z_mm"))
+        m = g["mode"].to_numpy(str)
+        k = np.searchsorted(t, ts, side="right") - 1
+        mc = np.array([code.get(v, 2) for v in m])
+        mode = np.where(k >= len(t) - 1, 3, mc[np.clip(k, 0, len(t) - 1)])
+        mode = np.where(k < 0, 2, mode)
+        pos = [np.round(np.interp(ts, t, a), 1).tolist() for a in (x, y, z)]
+        vt, vx, vy, vz, vzz = [], [], [], [], []
+        di = np.nonzero(m[:-1] == "D")[0]
+        if len(di):
+            for run in np.split(di, np.nonzero(np.diff(di) != 1)[0] + 1):
+                ii = np.r_[run, run[-1] + 1]
+                keep, lx, ly = [], None, None
+                for j, q in enumerate(ii):
+                    if lx is None or j == len(ii) - 1 or np.hypot(x[q] - lx, y[q] - ly) >= tol:
+                        keep.append(q)
+                        lx, ly = x[q], y[q]
+                vt += [round(float(t[q]), 2) for q in keep] + [round(float(t[keep[-1]]), 2)]
+                vx += [round(float(x[q]), 1) for q in keep] + [None]
+                vy += [round(float(y[q]), 1) for q in keep] + [None]
+                vz += [round(float(z[q]), 2) for q in keep] + [None]
+                vzz += [float(z[q]) for q in keep] + [float(z[keep[-1]])]
+        vzz = np.round(np.asarray(vzz, float), 3)
+        first = np.searchsorted(vzz, levels, side="left").tolist() if len(vzz) else [0] * len(levels)
+        out.append({"id": r["id"], "base": [float(v) for v in r["base_xyz_mm"]], "x": pos[0], "y": pos[1], "z": pos[2],
+                    "m": mode.tolist(), "vt": vt, "vx": vx, "vy": vy, "vz": vz, "first": first})
+    return {"T": T, "robots": out, "levels": levels.tolist(), "starts": starts, "zmax": zmax,
+            "work_r": float(cfg.get("workspace", {}).get("radius_mm", 700.0))}
+
+
 def _thin(xs, ys, hs, tol=3.0):
     """이어진 선에서 앞 점과 tol(mm) 안인 점은 빼고 0.1 mm·0.1 s 로 반올림한다(끝점·끊긴 곳은 남김). 재생 그림을 가볍게."""
     ox, oy, oh = [], [], []
@@ -275,3 +329,63 @@ def layer_frames(name: str, shape: str, set_dir: str) -> list[list[dict]] | None
     seg, span = M["seg"], M["span"]
     return [layer_view(seg[seg["layer"] == L], M["robots"], float(span.loc[L, "t0"]), thin=True)
             if L in span.index else [] for L in range(M["n"])]
+
+
+# ---------------------------------------------------------------- 층별 점검: 형상에서 보기(tools/shape_diff.py 가 만든 layer_shapes.zip)
+VENV_PY = ROOT / "WAAM_Validator" / ".venv" / "Scripts" / "python.exe"
+
+
+def shape_view_path(name: str, shape: str) -> Path:
+    return RUNS / "evals" / name / shape / "layer_shapes.zip"
+
+
+@st.cache_data(ttl=600, max_entries=8, show_spinner=False)
+def shape_view(name: str, shape: str, mtime: float) -> dict | None:
+    """층마다 점수·넓이·큰 조각 목록·3D 용 빈틈/넘침 삼각형·기준 미달 층 테두리(mtime 은 다시 만들면 캐시를 새로 읽게)."""
+    import zipfile
+    p = shape_view_path(name, shape)
+    if not p.exists():
+        return None
+    with zipfile.ZipFile(p) as z:
+        return json.loads(z.read("summary.json"))
+
+
+@st.cache_data(ttl=600, max_entries=24, show_spinner=False)
+def shape_view_layer(name: str, shape: str, layer: int, mtime: float) -> dict | None:
+    """층 하나의 단면 그림: 목표 단면·쌓인 면·빈틈·넘침(고리는 [x0, y0, x1, y1, …])·불 켜고 지나간 길."""
+    import zipfile
+    with zipfile.ZipFile(shape_view_path(name, shape)) as z:
+        try:
+            return json.loads(z.read(f"L{layer:04d}.json"))
+        except KeyError:
+            return None
+
+
+@st.cache_data(ttl=3600, max_entries=8, show_spinner="형상(STL)을 읽는 중…")
+def target_mesh(set_dir: str, shape: str) -> dict | None:
+    """목표 STL → 꼭짓점 x, y, z 와 삼각형 꼭짓점 번호 i, j, k (이진·글자 STL 모두)."""
+    import numpy as np
+    p = ROOT / set_dir / shape / "target.stl"
+    if not p.exists():
+        return None
+    raw = p.read_bytes()
+    n = int.from_bytes(raw[80:84], "little") if len(raw) >= 84 else -1
+    if len(raw) == 84 + 50 * n:
+        rec = np.frombuffer(raw, dtype=np.dtype([("n", "<f4", 3), ("v", "<f4", (3, 3)), ("a", "<u2")]), count=n, offset=84)
+        v = rec["v"].reshape(-1, 3).astype(float)
+    else:
+        v = np.array(re.findall(r"vertex\s+(\S+)\s+(\S+)\s+(\S+)", raw.decode("utf-8", "ignore")), float)
+    u, inv = np.unique(np.round(v, 4), axis=0, return_inverse=True)
+    f = inv.reshape(-1, 3)
+    return {"x": u[:, 0], "y": u[:, 1], "z": u[:, 2], "i": f[:, 0], "j": f[:, 1], "k": f[:, 2]}
+
+
+def make_shape_view(name: str, set_dir: str, shape: str) -> tuple[bool, str]:
+    """tools/shape_diff.py 를 WAAM venv 파이썬으로 돌려 layer_shapes.zip 을 만든다(채점기 함수가 그 venv 에 있다)."""
+    import subprocess
+    cmd = [str(VENV_PY), "-X", "utf8", str(ROOT / "tools" / "shape_diff.py"), name, set_dir, shape, "--force"]
+    try:
+        r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=900)
+    except (OSError, subprocess.TimeoutExpired) as ex:
+        return False, str(ex)
+    return r.returncode == 0, (r.stdout + r.stderr).strip()[-800:]

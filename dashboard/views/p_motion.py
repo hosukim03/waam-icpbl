@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from data import WAIT_MIN, eval_index, layer_frames, layer_view, motion, run_table, traj_shapes
+from data import WAIT_MIN, eval_index, layer_frames, layer_view, motion, run_table, timeline3d, traj_shapes
 from theme import badge, chart, header, pal, style
 
 header("움직임 그림", "한 층에서 로봇들이 실제로 움직인 모습입니다(위에서 본 그림). 실선은 쌓은 선, 점선은 이동한 길, "
@@ -21,12 +21,12 @@ labels = dict(zip(idx["set"], idx["set_label"]))
 f1, f2, f3, f4 = st.columns([1, 2, 2, 1.3])
 s = f1.selectbox("묶음", sets, format_func=labels.get)
 g = idx[idx["set"] == s].sort_values("name").to_dict("records")
-e = f2.selectbox("실험", g, index=len(g) - 1, format_func=lambda x: f"{x['exp']} — {x['desc']}")
+e = f2.selectbox("실험", g, index=len(g) - 1, format_func=lambda x: f"{x['exp']} — {x['desc']}", key=f"exp_{s}")
 t = run_table(e["name"], e["set_dir"]).set_index("형상")
 shapes = traj_shapes(e["name"])
 sh = f3.selectbox("형상", shapes, format_func=lambda k: f"{k}  {badge(t.loc[k, '통과'])}  {t.loc[k, '고른 설정']}  {t.loc[k, '설명']}"
                   if k in t.index else k)
-view = f4.radio("보기", ["층 넘기며 재생", "한 층 자세히"], horizontal=False)
+view = f4.radio("보기", ["층 넘기며 재생", "한 층 자세히", "3D 시간 재생"], horizontal=False)
 M = motion(e["name"], sh, e["set_dir"])
 if M is None:
     st.warning("궤적이 없습니다.")
@@ -96,6 +96,34 @@ def title_of(L: int, views: list[dict]) -> str:
     return (f"{labels[s]} {sh}번 · {L + 1}/{n}층 · {dur.get(L, 0.0):,.1f} s<br>"
             f"<span style='font-size:12px'>{summary(views)}</span>")
 
+
+if view == "3D 시간 재생":
+    import json
+    from pathlib import Path
+
+    import streamlit.components.v1 as components
+    D3 = timeline3d(e["name"], sh, e["set_dir"])
+    if D3 is None:
+        st.warning("궤적이 없습니다.")
+        st.stop()
+    page = (Path(__file__).resolve().parent.parent / "assets" / "motion3d.html").read_text(encoding="utf-8")
+    for k, v in {"__INK__": P["ink"], "__INK2__": P["ink2"], "__MUTED__": P["muted"], "__GRID__": P["grid"],
+                 "__SURFACE__": P["surface"], "__ACCENT__": P["series"][0]}.items():
+        page = page.replace(k, v)
+    page = (page.replace("__COLORS__", json.dumps(COL)).replace("__PAL__", json.dumps(P))
+            .replace("__DATA__", json.dumps(D3, separators=(",", ":"))))
+    # 그림 라이브러리는 인터넷에서 받지 않고, 설치된 plotly 파이썬 패키지에 든 plotly.min.js 를 그대로 넣는다
+    import plotly
+    js = (Path(plotly.__file__).parent / "package_data" / "plotly.min.js").read_text(encoding="utf-8")
+    page = page.replace("__PLOTLY__", "<script>" + js.replace("</script", "<\\/script") + "</script>")
+    st.markdown(f"**{labels[s]} {sh}번** · {n}층 · makespan {D3['T']:,.0f} s")
+    components.html(page, height=860, scrolling=False)
+    st.caption("마우스로 끌면 돌아가고, 휠로 확대·축소합니다. ▶ 재생을 누르면 1초 간격 위치로 움직이며, 속도 30배면 "
+               "한 장에 1초씩 넘어갑니다. 막대를 끌거나 '층으로 가기'로 원하는 때로 갈 수 있습니다. 굵은 선은 지금 층에서 "
+               "쌓은 선, 옅은 선은 지난 층들입니다. 기둥은 로봇 베이스, 기둥 꼭대기에서 토치까지의 선은 팔을 단순하게 "
+               "그린 것입니다(채점기도 위에서 본 베이스–토치 선분으로 충돌을 검사합니다). 토치 표시: ● 쌓기, ◇ 이동, "
+               "× 기다리기, □ 끝남. 쌓은 선은 가볍게 하려고 5 mm 간격으로 줄였습니다.")
+    st.stop()
 
 if view == "층 넘기며 재생":
     frames_v = layer_frames(e["name"], sh, e["set_dir"])
