@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from data import WAIT_MIN, eval_index, layer_frames, layer_view, motion, run_table, timeline3d, traj_shapes
-from theme import badge, chart, header, pal, style
+from theme import chart, header, pal, shape_note, shape_option, style
 
 header("움직임 그림", "한 층에서 로봇들이 실제로 움직인 모습입니다(위에서 본 그림). 실선은 쌓은 선, 점선은 이동한 길, "
        f"×는 다른 로봇 팔과 부딪히지 않으려고 기다린 곳({WAIT_MIN:.0f}초 이상), ○는 층 끝에서 다른 로봇이 끝나기를 기다린 곳, "
@@ -24,8 +24,9 @@ g = idx[idx["set"] == s].sort_values("name").to_dict("records")
 e = f2.selectbox("실험", g, index=len(g) - 1, format_func=lambda x: x['exp_label'], key=f"exp_{s}")
 t = run_table(e["name"], e["set_dir"]).set_index("형상")
 shapes = traj_shapes(e["name"])
-sh = f3.selectbox("형상", shapes, format_func=lambda k: f"{k}  {badge(t.loc[k, '통과'])}  {t.loc[k, '고른 설정']}  {t.loc[k, '설명']}"
-                  if k in t.index else k)
+sh = f3.selectbox("형상", shapes, format_func=lambda k: shape_option(k, t.loc[k]) if k in t.index else k)
+if sh in t.index:
+    f3.caption(shape_note(t.loc[sh]))
 view = f4.radio("보기", ["층 넘기며 재생", "한 층 자세히", "3D 시간 재생"], horizontal=False)
 M = motion(e["name"], sh, e["set_dir"])
 if M is None:

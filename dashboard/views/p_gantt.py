@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from data import eval_index, motion, run_table, traj_shapes
-from theme import badge, chart, header, pal, style
+from theme import chart, header, pal, shape_note, shape_option, style
 
 header("작업 일정(간트)", "로봇마다 시간에 따라 무엇을 했는지 보여 줍니다. 쌓기, 이동하기(불꽃 없이 옮겨 가기), "
        "기다리기(다른 로봇 팔과 부딪히지 않으려고 제자리에 선 시간), 층 끝 기다리기(그 층을 먼저 끝내고 다른 로봇을 "
@@ -27,8 +27,9 @@ g = idx[idx["set"] == s].sort_values("name").to_dict("records")
 e = f2.selectbox("실험", g, index=len(g) - 1, format_func=lambda x: x['exp_label'], key=f"exp_{s}")
 t = run_table(e["name"], e["set_dir"]).set_index("형상")
 shapes = traj_shapes(e["name"])
-sh = f3.selectbox("형상", shapes, format_func=lambda k: f"{k}  {badge(t.loc[k, '통과'])}  {t.loc[k, '고른 설정']}  {t.loc[k, '설명']}"
-                  if k in t.index else k)
+sh = f3.selectbox("형상", shapes, format_func=lambda k: shape_option(k, t.loc[k]) if k in t.index else k)
+if sh in t.index:
+    f3.caption(shape_note(t.loc[sh]))
 M = motion(e["name"], sh, e["set_dir"])
 if M is None:
     st.warning("궤적이 없습니다.")

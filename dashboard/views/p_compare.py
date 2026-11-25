@@ -40,7 +40,7 @@ fig = go.Figure(go.Bar(
     y=ch["형상"], x=ch["차이(%)"], orientation="h",
     marker_color=[P["better"] if v < 0 else P["worse"] for v in ch["차이(%)"]],
     text=[f"{v:+.2f}%" for v in ch["차이(%)"]], textposition="outside", textfont=dict(color=P["ink2"]),
-    customdata=ch[["설명 기준", "makespan(s) 기준", "makespan(s) 비교"]].values,
+    customdata=ch[["모양 기준", "makespan(s) 기준", "makespan(s) 비교"]].values,
     hovertemplate="형상 %{y}<br>%{customdata[0]}<br>%{customdata[1]:,.1f} → %{customdata[2]:,.1f} s (%{x:+.2f}%)<extra></extra>"))
 lim = max(1.0, float(ch["차이(%)"].abs().max()) * 1.25)
 style(fig, height=max(240, 28 * len(ch) + 90), legend=False,
@@ -50,9 +50,9 @@ fig.update_yaxes(type="category", showgrid=False)
 chart(fig)
 
 view = ch.assign(**{"통과 기준": ch["통과 기준"].map(badge), "통과 비교": ch["통과 비교"].map(badge)})
-cols = ["형상", "설명 기준", "통과 기준", "통과 비교", "makespan(s) 기준", "makespan(s) 비교", "차이(s)", "차이(%)",
+cols = ["형상", "모양 기준", "통과 기준", "통과 비교", "makespan(s) 기준", "makespan(s) 비교", "차이(s)", "차이(%)",
         "고른 설정 기준", "고른 설정 비교", "겹침 점수(%) 기준", "겹침 점수(%) 비교"]
-st.dataframe(view[cols].rename(columns={"설명 기준": "설명"}), hide_index=True, width="stretch",
+st.dataframe(view[cols].rename(columns={"모양 기준": "모양"}), hide_index=True, width="stretch",
              column_config={k: st.column_config.NumberColumn(format="%.1f") for k in ("makespan(s) 기준", "makespan(s) 비교")} |
                            {"차이(s)": st.column_config.NumberColumn(format="%+.1f"), "차이(%)": st.column_config.NumberColumn(format="%+.2f"),
                             "겹침 점수(%) 기준": st.column_config.NumberColumn(format="%.2f"),

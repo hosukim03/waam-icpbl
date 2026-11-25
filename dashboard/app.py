@@ -34,7 +34,6 @@ page = st.navigation({
               st.Page("views/p_layers.py", title="층별 점검", icon="🧱"),
               st.Page("views/p_motion.py", title="움직임 그림", icon="🧭"),
               st.Page("views/p_gantt.py", title="작업 일정(간트)", icon="📊")],
-    "형상": [st.Page("views/p_shapes.py", title="형상 그림", icon="🖼")],
 }, expanded=True)
 with st.sidebar:
     reps = sorted((ROOT / "results").glob("report_public_*_1core.csv"))

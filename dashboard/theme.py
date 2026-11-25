@@ -66,6 +66,25 @@ def badge(status: str) -> str:
     return "✅ 통과" if status == "PASS" else ("⛔ 실패" if status == "FAIL" else f"· {status}")
 
 
+def _txt(v) -> str:
+    return v if isinstance(v, str) else ""
+
+
+def shape_option(k: str, row) -> str:
+    """형상 칸 글: '01 ✅ 통과 · 벌집 · 16층'. row 는 run_table 의 한 줄(모양·난이도·층수 가운데 아는 것만 붙인다)."""
+    parts = [f"{k} {badge(row['통과'])}"] + [x for x in (_txt(row.get("모양")), _txt(row.get("난이도"))) if x]
+    n = row.get("층수")
+    if n is not None and n == n:                                  # 비어 있지(NaN) 않으면
+        parts.append(f"{int(n)}층")
+    return " · ".join(parts)
+
+
+def shape_note(row) -> str:
+    """형상 칸 아래 작은 글씨: 고른 설정 코드와 형상을 만든 설정(생성기가 적은 원래 글)."""
+    pick, made = _txt(row.get("고른 설정")), _txt(row.get("설명")).replace("~", "\\~")
+    return " · ".join(x for x in (f"고른 설정 `{pick}`" if pick else "", f"만든 설정: {made}" if made else "") if x)
+
+
 def style(fig: go.Figure, height: int = 360, legend: bool = True, title: str | None = None) -> go.Figure:
     """얇은 선·막대, 실선 머리카락 격자, 글자는 글자색(계열 색 아님), 범례는 계열이 둘 이상일 때만."""
     p = pal()

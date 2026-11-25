@@ -12,10 +12,9 @@ SET_NAMES = {"tests": "공개 6", "check1010_v102": "연습 1", "novel1027": "�
 SET_NOTE = {"tests": "교수님이 공개한 형상 6개(채점 대상과 같은 종류)",
             "check1010_v102": "우리 생성기의 21종류를 하나씩(21개), 설정을 고를 때 결과를 본 연습용",
             "novel1027": "21종류와 다른 방식으로 만든 형상 21개(처음 보는 종류)"}
-# 대시보드에서 숨기는 묶음과 그림(2026-11-25): fresh1027 은 연습 1 과 같은 생성기에 시드만 바꾼 묶음이라 이름만 늘려
+# 대시보드에서 숨기는 묶음(2026-11-25): fresh1027 은 연습 1 과 같은 생성기에 시드만 바꾼 묶음이라 이름만 늘려
 # 헷갈리게 해서 뺀다. 자료(runs/evals, data/)는 그대로 둔다.
 HIDDEN_SETS = {"fresh1027"}
-HIDDEN_IMAGES = {"fresh1027.png", "seed_compare.png"}
 # 기록 이름·설명에 남은 옛 묶음 이름 → 화면 이름(자료 파일은 그대로 두고 보일 때만 바꾼다)
 OLD_SET_WORDS = [("새 방식 21개", "연습 2(21개)"), ("새방식", "연습2"), ("새 방식", "연습 2"), ("연습 21개", "연습 1(21개)")]
 
@@ -36,6 +35,39 @@ EXP_TITLES = {"1027a_80mm": "80 mm 조각 후보 더함", "1027b_fix": "점수 �
 TIMING_TITLES = {"1027_공개_지금_A_B": "80 mm 조각 후보 비교", "1027_공개_B_고치기전후": "점수 계산 고치기 전후",
                  "1027_새방식_지금_B": "80 mm 조각 후보 비교", "1028_공개_국소탐색_횟수": "국소 탐색 횟수 비교",
                  "1124_공개_코랩": "노트북과 코랩 비교"}
+# 형상 칸에 보일 모양 이름(2026-11-25): 형상을 만든 설정(data/<묶음>/<형상>/desc.txt)의 영어 낱말 → 한국어. 이름은
+# 생성기에 적힌 것을 따른다(연습 1: tools/make_jobs_diverse.py 머리말, 연습 2: tools/make_jobs_novel.py 의 KO).
+SHAPE_KO = {"line": "막대", "ring": "원형 벽", "rect": "사각 벽", "block": "작은 속찬 덩어리", "wave": "물결선",
+            "hexgrid": "벌집", "trigrid": "삼각 격자", "sqgrid": "사각 격자", "spiral": "나선", "truss": "삼각 트러스",
+            "islands": "떨어진 섬 여러 개", "star": "별 모양 벽", "plate": "판+기둥", "vase": "비틀린 꽃병",
+            "bracket": "L자+보강판", "gear": "톱니바퀴", "impeller": "임펠러(날개바퀴)", "letters": "속찬 글자",
+            "flange": "구멍 뚫린 원판", "slotplate": "긴 홈·구멍 판",
+            "blob": "둥근 덩어리", "shell": "무작위 윤곽 벽", "tree": "갈라지는 벽", "cells": "불규칙 칸막이",
+            "polywall": "꺾인 벽", "bars": "막대 조합 부품", "twins": "합쳐지거나 갈라지는 덩어리",
+            "holey": "구멍이 생겼다 사라지는 덩어리"}
+# 공개 6개는 만든 설정 파일이 없어, 이 형상들을 본떠 만든 연습 1 종류의 이름을 쓴다(make_jobs_diverse.py 머리말)
+PUBLIC_KO = {"01": "벌집", "02": "나선", "03": "삼각 트러스", "04": "판+기둥", "05": "비틀린 꽃병", "06": "L자+보강판"}
+LEVELS = ("쉬움", "중간", "어려움")
+
+
+def shape_name(desc: str, set_name: str = "", shape: str = "") -> str:
+    """형상을 만든 설정(desc.txt) → 짧은 한국어 모양 이름. 아는 낱말이 없으면 빈 문자열."""
+    if set_name == "tests":
+        return PUBLIC_KO.get(shape, "")
+    words = desc.split()
+    for i, w in enumerate(words):
+        kind, _, extra = w.partition("/")
+        nxt = words[i + 1] if i + 1 < len(words) else ""
+        if kind == "flare" and extra in SHAPE_KO:              # flare/<바탕 모양> 넓어짐|좁아짐
+            way = {"넓어짐": "위로 넓어지는", "좁아짐": "위로 좁아지는"}.get(nxt, "넓어지거나 좁아지는")
+            return f"{way} {SHAPE_KO[extra]}"
+        if kind == "twins" and extra in ("합쳐짐", "갈라짐"):    # twins/합쳐짐|갈라짐 벽|속참
+            return f"위로 가며 {'합쳐지는' if extra == '합쳐짐' else '갈라지는'} 덩어리"
+        if kind in SHAPE_KO:
+            return SHAPE_KO[kind]
+    return ""
+
+
 # 채점기 v1.0.2 기준
 IOU_MIN, COVER_MIN, OVER_MAX = 0.98, 0.98, 0.03
 
@@ -96,16 +128,20 @@ def shape_desc(set_dir: str) -> dict:
 def run_table(name: str, set_dir: str) -> pd.DataFrame:
     """실험 하나의 형상별 결과."""
     base = RUNS / "evals" / name
-    b = bounds(Path(set_dir).name)
+    set_name = Path(set_dir).name
+    b = bounds(set_name)
     desc = shape_desc(set_dir)
     rows = []
     for d in sorted(p for p in base.iterdir() if p.is_dir()):
+        dsc = desc.get(d.name, "")
+        first = dsc.split()[0] if dsc.strip() else ""
         s = _solve(d / "solve.txt")
         sm = json.loads((d / "summary.json").read_text(encoding="utf-8")) if (d / "summary.json").exists() else {}
         sh = sm.get("shape", {})
         ms = float(sm["schedule"]["makespan_s"]) if sm else (s["cands"].get(s["best"], (None, None))[1] or float("nan"))
         bb = b.get(d.name, {})
-        rows.append({"형상": d.name, "설명": desc.get(d.name, ""), "층수": bb.get("layers"),
+        rows.append({"형상": d.name, "모양": shape_name(dsc, set_name, d.name), "난이도": first if first in LEVELS else "",
+                     "설명": dsc, "층수": bb.get("layers"),
                      "고른 설정": s["best"], "makespan(s)": ms, "통과": sm.get("status", "?"),
                      "겹침 점수(%)": 100 * sh.get("iou", float("nan")), "덮은 비율(%)": 100 * sh.get("coverage", float("nan")),
                      "넘친 비율(%)": 100 * sh.get("overfill_ratio", float("nan")),
@@ -144,11 +180,6 @@ WAY_NAMES = {"now": "지금", "A": "A (80 mm 더함)", "B": "B (160→80 mm)", "
              "끔": "국소 탐색 끔", "ls1": "층마다 1번", "ls2": "층마다 2번", "ls4": "층마다 4번",
              "노트북": "노트북 코어 1개", "코랩": "코랩 무료 CPU"}
 COLAB_LIMIT_S = 300.0   # 최종 테스트: 코랩에서 형상 하나당 5분
-# tools/ 그림 파일 → 화면에 보일 제목
-IMAGE_TITLES = {"novel_fail.png": "연습 2 형상에서 떨어진 3개 — 어디가 비었나",
-                "novel1027.png": "연습 2 형상 21개 (novel1027, 21종류와 다른 방식)",
-                "our_shapes.png": "우리 생성기 21종류 (check808)",
-                "public_models.png": "공개 형상 6개"}
 
 
 @st.cache_data(ttl=30)
@@ -174,11 +205,6 @@ def read_report(p: Path) -> pd.DataFrame:
     df = pd.read_csv(p, encoding="utf-8-sig", dtype={"model": str})
     return df.rename(columns={"model": "모델", "makespan_s": "makespan(s)", "gen_s": "계산 시간(s)", "status": "통과",
                               "collisions": "충돌", "iou": "겹침 점수"})
-
-
-def images() -> list[Path]:
-    return sorted((p for p in (ROOT / "tools").glob("*.png") if p.name not in HIDDEN_IMAGES),
-                  key=lambda p: p.stat().st_mtime, reverse=True)
 
 
 # ---------------------------------------------------------------- 움직임 그림(궤적을 층마다 나누기)

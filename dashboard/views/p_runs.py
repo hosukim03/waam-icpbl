@@ -3,7 +3,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from data import SET_NOTE, eval_index, run_table
-from theme import badge, chart, header, pal, style
+from theme import badge, chart, header, pal, shape_note, shape_option, style
 
 header("묶음 결과", "형상 묶음 하나에서 실험 하나의 결과입니다. 풀이 시간은 여러 형상을 동시에 돌린 값이라 참고만 합니다"
        "(코어 1개 시간은 '계산 시간' 쪽).")
@@ -35,7 +35,7 @@ fig = go.Figure(go.Bar(
     y=t["형상"], x=t["최소의 몇 배"], orientation="h",
     marker_color=[P["series"][0] if v else P["critical"] for v in ok],
     text=["" if v else "⛔ 실패" for v in ok], textposition="outside", textfont=dict(color=P["ink"]),
-    customdata=t[["설명", "makespan(s)", "통과"]].assign(통과=t["통과"].map(badge)).values,
+    customdata=t[["모양", "makespan(s)", "통과"]].assign(통과=t["통과"].map(badge)).values,
     hovertemplate="형상 %{y}  %{customdata[2]}<br>%{customdata[0]}<br>makespan %{customdata[1]:,.1f} s<br>"
                   "이론상 최소의 %{x:.2f}배<extra></extra>"))
 fig.add_vline(x=1, line_color=P["axis"], line_width=1)
@@ -47,9 +47,9 @@ chart(fig)
 
 show = t.drop(columns=["_cands"]).assign(통과=t["통과"].map(badge))
 st.dataframe(show, hide_index=True, width="stretch", height=min(36 * (len(show) + 1) + 4, 800),
-             column_order=["형상", "설명", "통과", "makespan(s)", "최소의 몇 배", "고른 설정", "겹침 점수(%)", "실패 층", "충돌",
-                           "층수", "덮은 비율(%)", "넘친 비율(%)", "이론상 최소(s)", "풀이 시간(s)"],
-             column_config={"설명": st.column_config.TextColumn(width="medium"),
+             column_order=["형상", "모양", "통과", "makespan(s)", "최소의 몇 배", "고른 설정", "겹침 점수(%)", "실패 층", "충돌",
+                           "층수", "덮은 비율(%)", "넘친 비율(%)", "이론상 최소(s)", "풀이 시간(s)", "설명"],
+             column_config={"설명": st.column_config.TextColumn("만든 설정", width="medium"),
                             "makespan(s)": st.column_config.NumberColumn(format="%.1f"),
                             "겹침 점수(%)": st.column_config.NumberColumn(format="%.2f"),
                             "덮은 비율(%)": st.column_config.NumberColumn(format="%.2f"),
@@ -61,8 +61,10 @@ st.dataframe(show, hide_index=True, width="stretch", height=min(36 * (len(show) 
 with st.expander("형상별 후보 설정 비교 (짧은 시험과 끝까지 계획한 makespan)"):
     st.caption("짧은 시험: 고르게 뽑은 4개 층만 계획해 본 makespan. 가장 빠른 것보다 10% 넘게 느린 후보는 끝까지 계획하지 않습니다. "
                "'끝까지'가 비어 있으면 중간에 멈춘 후보입니다(후보를 전부 끝까지 계획한 실험에서만 다 찹니다).")
-    sh = st.selectbox("형상", t["형상"], format_func=lambda k: f"{k}  {t.set_index('형상').loc[k, '설명']}")
-    row = t.set_index("형상").loc[sh]
+    ti = t.set_index("형상")
+    sh = st.selectbox("형상", t["형상"], format_func=lambda k: shape_option(k, ti.loc[k]))
+    row = ti.loc[sh]
+    st.caption(shape_note(row))
     cands = pd.DataFrame([{"후보 설정": k, "짧은 시험(s)": v[0], "끝까지(s)": v[1], "고름": "◀ 고름" if k == row["고른 설정"] else ""}
                           for k, v in row["_cands"].items()])
     st.dataframe(cands, hide_index=True, width="stretch",
