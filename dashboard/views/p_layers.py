@@ -302,6 +302,7 @@ if spot >= 0:
     f2.update_xaxes(range=[b["cx"] - r, b["cx"] + r])
     f2.update_yaxes(range=[b["cy"] - r, b["cy"] + r])
 f2.update_layout(uirevision=f"{e['name']}/{sh}/{L}/{spot}", margin=dict(l=8, r=16, t=40, b=100),
+                 dragmode="pan",                           # 끌면 옮기기(기본값은 네모를 그려 확대), 확대는 휠
                  legend=dict(orientation="h", yanchor="top", y=-0.13, xanchor="left", x=0, font=dict(color=P["ink2"])))
 with right:
     st.plotly_chart(f2, width="stretch", theme=None, key="sv2d",
