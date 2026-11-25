@@ -31,6 +31,11 @@ def rename_sets(text: str) -> str:
 EXP_TITLES = {"1027a_80mm": "80 mm 조각 후보 더함", "1027b_fix": "점수 계산을 채점기와 맞춤",
               "1027c_adapt": "벽 두께 맞춤 경로 더함", "1028a_ls4": "국소 탐색 층마다 4번",
               "1028b_ls2": "국소 탐색 층마다 2번", "1110a_ls2_adapt뺌": "벽 두께 맞춤 경로 뺌"}
+# 계산 시간 측정 기록 화면 이름(2026-11-25): 로그 파일 이름은 그대로 두고, 잰 순서(날짜, 같은 날은 모은 순서)대로
+# 번호를 붙여 '측정 N · 무엇을 쟀나 (묶음)'으로 보인다. 여기 없는 새 기록은 파일 이름을 쓴다.
+TIMING_TITLES = {"1027_공개_지금_A_B": "80 mm 조각 후보 비교", "1027_공개_B_고치기전후": "점수 계산 고치기 전후",
+                 "1027_새방식_지금_B": "80 mm 조각 후보 비교", "1028_공개_국소탐색_횟수": "국소 탐색 횟수 비교",
+                 "1124_공개_코랩": "노트북과 코랩 비교"}
 # 채점기 v1.0.2 기준
 IOU_MIN, COVER_MIN, OVER_MAX = 0.98, 0.98, 0.03
 
@@ -122,9 +127,13 @@ def timing_index() -> pd.DataFrame:
     rows = json.loads(p.read_text(encoding="utf-8")) if p.exists() else []
     df = pd.DataFrame(rows)
     if not df.empty:
-        df = df[~df["set_dir"].map(lambda s: Path(s).name).isin(HIDDEN_SETS)].copy()
+        df = df[~df["set_dir"].map(lambda s: Path(s).name).isin(HIDDEN_SETS)]
+        df = df.sort_values("date", kind="stable").reset_index(drop=True)   # 같은 날은 index.json 에 모은 순서
+        df["num"] = df.index + 1
         df["set_label"] = df["set_dir"].map(set_label)
-        df["label"] = df["name"].map(rename_sets)           # 화면에 보일 기록 이름(name 은 로그 파일 이름이라 그대로)
+        # 화면에 보일 기록 이름(name 은 로그 파일 이름이라 그대로)
+        df["label"] = [f"측정 {n} · {TIMING_TITLES.get(x, rename_sets(x))} ({s})"
+                       for n, x, s in zip(df["num"], df["name"], df["set_label"])]
         df["desc"] = df["desc"].fillna("").map(rename_sets)
     return df
 

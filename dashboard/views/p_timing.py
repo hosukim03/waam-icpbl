@@ -13,8 +13,9 @@ if idx.empty:
     st.info("runs/timing 에 모은 측정 기록이 없습니다(tools/collect_evals.py timing).")
     st.stop()
 P = pal()
-e = st.selectbox("측정 기록", idx.sort_values("name", ascending=False).to_dict("records"),
-                 format_func=lambda r: f"{r['label']} — {r['desc']}")
+recs = idx.sort_values("num").to_dict("records")
+e = st.selectbox("측정 기록", recs, index=len(recs) - 1, format_func=lambda r: r["label"])
+st.caption(e["desc"])
 t = timing_table(e["name"])
 if t.empty:
     st.warning("기록을 읽지 못했습니다.")
