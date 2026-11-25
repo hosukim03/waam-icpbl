@@ -37,10 +37,10 @@ BUDGET 번까지만 쓴다: 첫 후보는 계획이 하나는 있어야 하므�
   코랩에서 충돌 검사 1번 ≈ 0.64 ms(04: 계획+국소 탐색 296 s / 462,565번), 32만 번 ≈ 205 s.
   무거운 형상 4개(한도 없음 → 32만 / 35만, makespan 변화, 코랩 예상 시간은 같은 때 함께 돌린 04 와의 비율로 환산):
     공개 04                28,048 s(코랩 342 s 실측) → +2.2%(약 250 s) / +1.1%(약 267 s)
-    연습 check1010_v102 21 32,227 s(약 316 s)        → +2.0%(약 255 s) / +0.9%(약 268 s)
-    fresh1027 03           44,148 s(약 355 s)        → +2.1%(약 158 s, 국소 탐색 못 함) / +2.0%(약 236 s)
-    새 방식 novel1027 20   25,586 s(약 307 s)        → +0.0%(약 260 s) / +0.0%(약 283 s, 경로 계산이 길어 5분에 가깝다)
-  35만은 새 방식 20 이 5분에 너무 가까워 32만으로 둔다. 모두 PASS·충돌 0.
+    연습 1 21번            32,227 s(약 316 s)        → +2.0%(약 255 s) / +0.9%(약 268 s)
+    fresh1027 03번         44,148 s(약 355 s)        → +2.1%(약 158 s, 국소 탐색 못 함) / +2.0%(약 236 s)
+    연습 2 20번            25,586 s(약 307 s)        → +0.0%(약 260 s) / +0.0%(약 283 s, 경로 계산이 길어 5분에 가깝다)
+  35만은 연습 2 20번이 5분에 너무 가까워 32만으로 둔다. 모두 PASS·충돌 0.
 """
 from __future__ import annotations
 
@@ -120,7 +120,7 @@ def race(names: list[str], trial, layers: dict, n: int, m1: int = SAMPLE) -> tup
     """(분석용, 쓰지 않음) 후보를 짧게 시험만 해서 하나를 고른다. trial(이름, 층 집합 또는 None) → makespan.
     1차: 고르게 뽑은 m1 층으로 전부 시험, 가장 빠른 것보다 KEEP 넘게 느린 후보는 뺀다.
     2차: 남은 후보가 둘 이상이면 다른 층을 더 시험해 1·2차 합으로 고른다.
-    공개 6개 + 연습 21개에서 후보 중 최선보다 +0.56%(7개 형상에서 놓침, 05 +1.14%): 층을 떼어 시험하면
+    공개 6개 + 연습 1(21개)에서 후보 중 최선보다 +0.56%(7개 형상에서 놓침, 05 +1.14%): 층을 떼어 시험하면
     층이 이어질 때 생기는 차이(앞 층이 끝난 자리에서 다음 층을 시작하는 데서 오는 차이)를 못 본다."""
     rank = {nm: (PRIORITY.index(nm) if nm in PRIORITY else len(PRIORITY), i) for i, nm in enumerate(names)}
     only1 = sample_layers(layers, n, m1)
@@ -157,7 +157,7 @@ def best_of_all(names: list[str], trial, plan, layers: dict, n: int, m1: int = S
         trials = {nm: trial(nm, only1) for nm in names}
         prio = {nm: (PRIORITY.index(nm) if nm in PRIORITY else len(PRIORITY)) for nm in names}
         # 짧은 시험에서 가장 빠른 후보보다 KEEP 넘게 느린 후보는 끝까지 계획하지 않는다
-        # (공개 6 + 연습 21개에서 끝까지 계획해 가장 짧았던 후보는 모두 이 안에 있었다)
+        # (공개 6 + 연습 1(21개)에서 끝까지 계획해 가장 짧았던 후보는 모두 이 안에 있었다)
         lo = min(trials.values())
         order = sorted((nm for nm in names if trials[nm] <= lo * (1 + KEEP)),
                        key=lambda nm: (round(trials[nm], 6), prio[nm], rank[nm]))

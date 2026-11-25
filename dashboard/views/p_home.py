@@ -89,7 +89,7 @@ else:
         e = g.sort_values("name").iloc[-1]
         t = run_table(e["name"], e["set_dir"])
         bb = t["이론상 최소(s)"].sum()
-        rows.append({"묶음": e["set_label"], "실험": e["exp"], "설명": e["desc"], "통과": f"{(t['통과'] == 'PASS').sum()} / {len(t)}",
+        rows.append({"묶음": e["set_label"], "실험": e["exp_label"], "설명": e["desc"], "통과": f"{(t['통과'] == 'PASS').sum()} / {len(t)}",
                      "makespan 합계(s)": t["makespan(s)"].sum(), "이론상 최소의 몇 배": t["makespan(s)"].sum() / bb if bb else None})
     st.dataframe(rows, hide_index=True, width="stretch",
                  column_config={"makespan 합계(s)": st.column_config.NumberColumn(format="%.1f"),

@@ -8,11 +8,29 @@ import streamlit as st
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNS = ROOT / "runs"
-SET_NAMES = {"tests": "공개 6", "check1010_v102": "연습 21", "fresh1027": "새 시드 21", "novel1027": "새 방식 21"}
-SET_NOTE = {"tests": "교수님이 공개한 형상(채점 대상과 같은 종류)",
-            "check1010_v102": "우리 생성기의 21종류, 설정을 고를 때 결과를 본 연습용",
-            "fresh1027": "우리 생성기, 처음 보는 시드. 종류는 같고 크기·두께·층수만 다름",
-            "novel1027": "21종류와 다른 방식으로 만든 형상(처음 보는 종류)"}
+SET_NAMES = {"tests": "공개 6", "check1010_v102": "연습 1", "novel1027": "연습 2"}
+SET_NOTE = {"tests": "교수님이 공개한 형상 6개(채점 대상과 같은 종류)",
+            "check1010_v102": "우리 생성기의 21종류를 하나씩(21개), 설정을 고를 때 결과를 본 연습용",
+            "novel1027": "21종류와 다른 방식으로 만든 형상 21개(처음 보는 종류)"}
+# 대시보드에서 숨기는 묶음과 그림(2026-11-25): fresh1027 은 연습 1 과 같은 생성기에 시드만 바꾼 묶음이라 이름만 늘려
+# 헷갈리게 해서 뺀다. 자료(runs/evals, data/)는 그대로 둔다.
+HIDDEN_SETS = {"fresh1027"}
+HIDDEN_IMAGES = {"fresh1027.png", "seed_compare.png"}
+# 기록 이름·설명에 남은 옛 묶음 이름 → 화면 이름(자료 파일은 그대로 두고 보일 때만 바꾼다)
+OLD_SET_WORDS = [("새 방식 21개", "연습 2(21개)"), ("새방식", "연습2"), ("새 방식", "연습 2"), ("연습 21개", "연습 1(21개)")]
+
+
+def rename_sets(text: str) -> str:
+    for a, b in OLD_SET_WORDS:
+        text = text.replace(a, b)
+    return text
+
+
+# 실험 화면 이름(2026-11-25): 기록 폴더 이름(날짜 + 그날 순서 + 줄임말)은 그대로 두고, 한 순서대로 번호를 붙여
+# '실험 N · 무엇을 바꿨나'로 보인다. 여기 없는 새 실험은 폴더 이름을 그대로 쓴다.
+EXP_TITLES = {"1027a_80mm": "80 mm 조각 후보 더함", "1027b_fix": "점수 계산을 채점기와 맞춤",
+              "1027c_adapt": "벽 두께 맞춤 경로 더함", "1028a_ls4": "국소 탐색 층마다 4번",
+              "1028b_ls2": "국소 탐색 층마다 2번", "1110a_ls2_adapt뺌": "벽 두께 맞춤 경로 뺌"}
 # 채점기 v1.0.2 기준
 IOU_MIN, COVER_MIN, OVER_MAX = 0.98, 0.98, 0.03
 
@@ -30,8 +48,12 @@ def eval_index() -> pd.DataFrame:
     if df.empty:
         return df
     df["set"] = df["set_dir"].map(lambda s: Path(s).name)
+    df = df[~df["set"].isin(HIDDEN_SETS)].copy()
     df["set_label"] = df["set_dir"].map(set_label)
+    df["desc"] = df["desc"].fillna("").map(rename_sets)
     df["exp"] = df["name"].map(lambda s: s.split("/")[0])
+    num = {x: i + 1 for i, x in enumerate(sorted(df["exp"].unique()))}   # 폴더 이름이 날짜로 시작해 이름순 = 한 순서
+    df["exp_label"] = df["exp"].map(lambda x: f"실험 {num[x]} · {EXP_TITLES.get(x, x)}")
     return df.sort_values(["exp", "set"])
 
 
@@ -100,7 +122,10 @@ def timing_index() -> pd.DataFrame:
     rows = json.loads(p.read_text(encoding="utf-8")) if p.exists() else []
     df = pd.DataFrame(rows)
     if not df.empty:
+        df = df[~df["set_dir"].map(lambda s: Path(s).name).isin(HIDDEN_SETS)].copy()
         df["set_label"] = df["set_dir"].map(set_label)
+        df["label"] = df["name"].map(rename_sets)           # 화면에 보일 기록 이름(name 은 로그 파일 이름이라 그대로)
+        df["desc"] = df["desc"].fillna("").map(rename_sets)
     return df
 
 
@@ -111,10 +136,8 @@ WAY_NAMES = {"now": "지금", "A": "A (80 mm 더함)", "B": "B (160→80 mm)", "
              "노트북": "노트북 코어 1개", "코랩": "코랩 무료 CPU"}
 COLAB_LIMIT_S = 300.0   # 최종 테스트: 코랩에서 형상 하나당 5분
 # tools/ 그림 파일 → 화면에 보일 제목
-IMAGE_TITLES = {"novel_fail.png": "다른 방식 형상에서 떨어진 3개 — 어디가 비었나",
-                "novel1027.png": "다른 방식으로 만든 확인용 형상 21개 (novel1027)",
-                "seed_compare.png": "같은 종류끼리: 예전 묶음(check808) ↔ 새 시드 묶음(fresh1027)",
-                "fresh1027.png": "새 시드 형상 21개 (fresh1027, 단면 선 그림)",
+IMAGE_TITLES = {"novel_fail.png": "연습 2 형상에서 떨어진 3개 — 어디가 비었나",
+                "novel1027.png": "연습 2 형상 21개 (novel1027, 21종류와 다른 방식)",
                 "our_shapes.png": "우리 생성기 21종류 (check808)",
                 "public_models.png": "공개 형상 6개"}
 
@@ -145,7 +168,8 @@ def read_report(p: Path) -> pd.DataFrame:
 
 
 def images() -> list[Path]:
-    return sorted((ROOT / "tools").glob("*.png"), key=lambda p: p.stat().st_mtime, reverse=True)
+    return sorted((p for p in (ROOT / "tools").glob("*.png") if p.name not in HIDDEN_IMAGES),
+                  key=lambda p: p.stat().st_mtime, reverse=True)
 
 
 # ---------------------------------------------------------------- 움직임 그림(궤적을 층마다 나누기)

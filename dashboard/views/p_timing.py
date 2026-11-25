@@ -14,7 +14,7 @@ if idx.empty:
     st.stop()
 P = pal()
 e = st.selectbox("측정 기록", idx.sort_values("name", ascending=False).to_dict("records"),
-                 format_func=lambda r: f"{r['name']} — {r['desc']}")
+                 format_func=lambda r: f"{r['label']} — {r['desc']}")
 t = timing_table(e["name"])
 if t.empty:
     st.warning("기록을 읽지 못했습니다.")

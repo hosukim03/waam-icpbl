@@ -24,7 +24,7 @@ labels = dict(zip(idx["set"], idx["set_label"]))
 f1, f2, f3 = st.columns([1, 2, 2])
 s = f1.selectbox("묶음", sets, format_func=labels.get)
 g = idx[idx["set"] == s].sort_values("name").to_dict("records")
-e = f2.selectbox("실험", g, index=len(g) - 1, format_func=lambda x: f"{x['exp']} — {x['desc']}", key=f"exp_{s}")
+e = f2.selectbox("실험", g, index=len(g) - 1, format_func=lambda x: x['exp_label'], key=f"exp_{s}")
 t = run_table(e["name"], e["set_dir"]).set_index("형상")
 shapes = traj_shapes(e["name"])
 sh = f3.selectbox("형상", shapes, format_func=lambda k: f"{k}  {badge(t.loc[k, '통과'])}  {t.loc[k, '고른 설정']}  {t.loc[k, '설명']}"

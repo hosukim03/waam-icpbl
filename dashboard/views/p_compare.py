@@ -12,7 +12,7 @@ if idx.empty or idx.groupby("set").size().max() < 2:
 P = pal()
 sets = [s for s, n in idx.groupby("set", sort=False).size().items() if n >= 2]
 labels = dict(zip(idx["set"], idx["set_label"]))
-fmt = lambda r: f"{r['exp']} — {r['desc']}"  # noqa: E731
+fmt = lambda r: r['exp_label']  # noqa: E731
 f1, f2, f3 = st.columns([2, 3, 3])
 s = f1.radio("묶음", sets, format_func=labels.get, horizontal=True)
 g = idx[idx["set"] == s].sort_values("name").to_dict("records")
