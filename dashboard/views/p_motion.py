@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from data import WAIT_MIN, eval_index, layer_frames, layer_view, motion, run_table, timeline3d, traj_shapes
+from pick import kept, pick
 from theme import chart, header, pal, shape_note, shape_option, style
 
 header("움직임 그림", "한 층에서 로봇들이 실제로 움직인 모습입니다(위에서 본 그림). 실선은 쌓은 선, 점선은 이동한 길, "
@@ -19,12 +20,17 @@ P = pal()
 sets = list(dict.fromkeys(idx["set"]))
 labels = dict(zip(idx["set"], idx["set_label"]))
 f1, f2, f3, f4 = st.columns([1, 2, 2, 1.3])
-s = f1.selectbox("묶음", sets, format_func=labels.get)
-g = idx[idx["set"] == s].sort_values("name").to_dict("records")
-e = f2.selectbox("실험", g, index=len(g) - 1, format_func=lambda x: x['exp_label'], key=f"exp_{s}")
+s = pick(f1, "묶음", sets, "set", "motion_set", format_func=labels.get)
+recs = {r["exp"]: r for r in idx[idx["set"] == s].sort_values("name").to_dict("records")}
+e = recs[pick(f2, "실험", list(recs), "exp", f"motion_exp_{s}", default=len(recs) - 1,
+              format_func=lambda x: recs[x]["exp_label"])]
+if kept("exp") not in recs:
+    f2.caption(f"다른 화면에서 고른 실험({dict(zip(eval_index()['exp'], eval_index()['exp_label'])).get(kept('exp'))})은 "
+               "경로를 모아 두지 않아 여기서는 볼 수 없습니다.")
 t = run_table(e["name"], e["set_dir"]).set_index("형상")
 shapes = traj_shapes(e["name"])
-sh = f3.selectbox("형상", shapes, format_func=lambda k: shape_option(k, t.loc[k]) if k in t.index else k)
+sh = pick(f3, "형상", shapes, "shape", f"motion_shape_{e['name']}",
+          format_func=lambda k: shape_option(k, t.loc[k]) if k in t.index else k)
 if sh in t.index:
     f3.caption(shape_note(t.loc[sh]))
 view = f4.radio("보기", ["층 넘기며 재생", "한 층 자세히", "3D 시간 재생"], horizontal=False)

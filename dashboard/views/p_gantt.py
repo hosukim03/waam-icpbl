@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from data import eval_index, motion, run_table, traj_shapes
+from pick import kept, pick
 from theme import chart, header, pal, shape_note, shape_option, style
 
 header("작업 일정(간트)", "로봇마다 시간에 따라 무엇을 했는지 보여 줍니다. 쌓기, 이동하기(불꽃 없이 옮겨 가기), "
@@ -22,12 +23,17 @@ KINDS = [("D", "쌓기", P["series"][1]), ("T", "이동하기", P["series"][0]),
 sets = list(dict.fromkeys(idx["set"]))
 labels = dict(zip(idx["set"], idx["set_label"]))
 f1, f2, f3 = st.columns([1, 2, 2])
-s = f1.selectbox("묶음", sets, format_func=labels.get)
-g = idx[idx["set"] == s].sort_values("name").to_dict("records")
-e = f2.selectbox("실험", g, index=len(g) - 1, format_func=lambda x: x['exp_label'], key=f"exp_{s}")
+s = pick(f1, "묶음", sets, "set", "gantt_set", format_func=labels.get)
+recs = {r["exp"]: r for r in idx[idx["set"] == s].sort_values("name").to_dict("records")}
+e = recs[pick(f2, "실험", list(recs), "exp", f"gantt_exp_{s}", default=len(recs) - 1,
+              format_func=lambda x: recs[x]["exp_label"])]
+if kept("exp") not in recs:
+    f2.caption(f"다른 화면에서 고른 실험({dict(zip(eval_index()['exp'], eval_index()['exp_label'])).get(kept('exp'))})은 "
+               "경로를 모아 두지 않아 여기서는 볼 수 없습니다.")
 t = run_table(e["name"], e["set_dir"]).set_index("형상")
 shapes = traj_shapes(e["name"])
-sh = f3.selectbox("형상", shapes, format_func=lambda k: shape_option(k, t.loc[k]) if k in t.index else k)
+sh = pick(f3, "형상", shapes, "shape", f"gantt_shape_{e['name']}",
+          format_func=lambda k: shape_option(k, t.loc[k]) if k in t.index else k)
 if sh in t.index:
     f3.caption(shape_note(t.loc[sh]))
 M = motion(e["name"], sh, e["set_dir"])

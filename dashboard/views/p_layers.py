@@ -7,6 +7,7 @@ import yaml
 
 from data import (COVER_MIN, IOU_MIN, OVER_MAX, ROOT, RUNS, eval_index, layer_metrics, make_shape_view, run_table, shape_view,
                   shape_view_layer, shape_view_path, target_mesh)
+from pick import pick
 from theme import badge, chart, header, pal, shape_note, shape_option, style
 
 header("층별 점검", "형상 하나를 층마다 채점한 값입니다. 합격하려면 궤적 규칙·팔 닿는 거리·충돌·모양 검사를 모두 넘어야 하고, "
@@ -19,13 +20,14 @@ P = pal()
 sets = list(dict.fromkeys(idx["set"]))
 labels = dict(zip(idx["set"], idx["set_label"]))
 f1, f2, f3 = st.columns([1, 2, 2])
-s = f1.selectbox("묶음", sets, format_func=labels.get)
-g = idx[idx["set"] == s].sort_values("name").to_dict("records")
-e = f2.selectbox("실험", g, index=len(g) - 1, format_func=lambda x: x['exp_label'], key=f"exp_{s}")
+s = pick(f1, "묶음", sets, "set", "layers_set", format_func=labels.get)
+recs = {r["exp"]: r for r in idx[idx["set"] == s].sort_values("name").to_dict("records")}
+e = recs[pick(f2, "실험", list(recs), "exp", f"layers_exp_{s}", default=len(recs) - 1,
+              format_func=lambda x: recs[x]["exp_label"])]
 t = run_table(e["name"], e["set_dir"]).set_index("형상")
 fails = [k for k in t.index if t.loc[k, "통과"] != "PASS"]
-sh = f3.selectbox("형상 (떨어진 형상이 먼저)", fails + [k for k in t.index if k not in fails],
-                  format_func=lambda k: shape_option(k, t.loc[k]), key=f"shape_{e['name']}")
+sh = pick(f3, "형상 (떨어진 형상이 먼저)", fails + [k for k in t.index if k not in fails], "shape",
+          f"layers_shape_{e['name']}", format_func=lambda k: shape_option(k, t.loc[k]))
 f3.caption(shape_note(t.loc[sh]))
 d = layer_metrics(e["name"], sh)
 if d.empty:
