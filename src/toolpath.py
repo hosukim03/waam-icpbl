@@ -346,6 +346,84 @@ def _gap_thin(A: BaseGeometry, P: list[np.ndarray], min_clear: float = RESCUE_CL
     return None
 
 
+# 모서리 밀기: 위 보강까지 해도 형상 목표를 넘는 후보가 없는 층에서만 만드는 후보. 비드 끝이 둥글어 목표 단면의
+# 뾰족한 바깥 모서리를 못 채우면(연습 형상 20 톱니바퀴: 톱니 끝 32곳이 각 4 mm² 씩 비어 층 IoU 97.8%), 그 모서리에서
+# 가장 가까운 경로 꼭짓점에서 모서리 쪽으로 짧게 갔다 돌아온다. 조금 밀면 새로 채우는 넓이가 밖으로 넘치는 넓이보다
+# 커서 IoU 가 오르고, 많이 밀면 넘침이 커져 다시 떨어진다(1110a 궤적에 손으로 넣어 채점기로 잰 층 IoU: 0.1 mm 98.02%,
+# 0.3 mm 98.22%, 0.4 mm 98.24%, 0.7 mm 98.04%). 짧은 거리부터 재서 목표를 처음 넘는 것을 쓰고(시간이 가장 적게 든다),
+# 끝까지 못 넘으면 쓰지 않는다(그 층은 예전처럼 IoU 가 가장 높은 후보).
+SPUR_STEPS = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7)
+SPUR_MIN_GAP = 0.5     # 이보다 작은 빈틈 조각(mm²)은 보지 않는다
+SPUR_REACH = 3.0       # 경로 꼭짓점이 모서리에서 R 보다 멀고 R × 이 값 이하일 때만 민다(그 모서리를 맡은 비드 끝)
+SPUR_BASES = 3         # 지금까지 잰 후보 중 IoU 가 높은 것 몇 개에 넣어 볼지
+SPUR_OPEN = 0.05       # 빈틈을 이만큼 깎았다 되살려 가는 틈을 끊는다(톱니바퀴 4층: 모서리 빈틈 둘이 가는 틈으로 이어져
+                       # 8.04 mm² 하나로 잡히면 모서리 하나를 놓쳐 32곳 중 28곳만 밀고 IoU 98.20% 에 그쳤다)
+
+
+def _spur_sites(A: BaseGeometry, P: list[np.ndarray]) -> list[tuple[int, int, np.ndarray]]:
+    """P 가 남긴 빈틈 가운데 목표 단면 테두리의 꼭짓점이 닿은 것마다 (조각 번호, 꼭짓점 번호, 모서리 쪽 단위 벡터).
+    모서리 = 그 빈틈에 닿은 테두리 꼭짓점 중 쌓인 곳에서 가장 먼 것, 미는 점 = 경로 꼭짓점 중 모서리에 가장 가까운 것."""
+    if not P:
+        return []
+    try:
+        Dp = deposit(P)
+        gaps = [g for g in _polys(A.difference(Dp).buffer(-SPUR_OPEN).buffer(SPUR_OPEN)) if g.area >= SPUR_MIN_GAP]
+    except _GEOS:
+        return []
+    if not gaps:
+        return []
+    bx = np.vstack([np.asarray(r.coords)[:, :2] for p in _polys(A) for r in (p.exterior, *p.interiors)])
+    xy = np.vstack([np.asarray(p)[:, :2] for p in P])
+    owner = [(i, j) for i, p in enumerate(P) for j in range(len(p))]
+    sites = []
+    e = 4 * SPUR_OPEN                              # 깎았다 되살리면 빈틈의 뾰족한 끝이 조금 무뎌지므로 그만큼 너그럽게
+    for g in gaps:
+        x0, y0, x1, y1 = g.bounds
+        near = bx[(bx[:, 0] >= x0 - e) & (bx[:, 0] <= x1 + e) & (bx[:, 1] >= y0 - e) & (bx[:, 1] <= y1 + e)]
+        if len(near):
+            near = near[shapely.intersects_xy(g.buffer(e), near[:, 0], near[:, 1])]
+        if not len(near):
+            continue
+        v = near[int(np.argmax(shapely.distance(Dp, shapely.points(near))))]
+        d = np.hypot(xy[:, 0] - v[0], xy[:, 1] - v[1])
+        m = int(np.argmin(d))
+        if not (R < d[m] <= R * SPUR_REACH):
+            continue
+        i, j = owner[m]
+        sites.append((i, j, (v - xy[m]) / d[m]))
+    return sites
+
+
+def _spurred(P: list[np.ndarray], sites, t: float) -> list[np.ndarray]:
+    """sites 의 꼭짓점마다 모서리 쪽으로 t mm 짧은 가지를 넣은 경로. 열린 선의 끝점이면 그쪽으로 늘이기만 하고,
+    그 밖(닫힌 고리 포함, 고리는 닫힌 채로 둬야 스케줄러가 시작점을 고를 수 있다)은 갔다가 돌아온다."""
+    at = {}
+    for i, j, u in sites:
+        at.setdefault((i, j), []).append(u)
+    out = []
+    for i, p in enumerate(P):
+        p = np.asarray(p, float)
+        n = len(p)
+        closed = n > 3 and np.hypot(*(p[0, :2] - p[-1, :2])) < 1e-6
+        rows = []
+        for j in range(n):
+            tips = []
+            for u in at.get((i, j), ()):
+                tip = p[j].copy()
+                tip[:2] = p[j, :2] + t * u
+                tips.append(tip)
+            if len(tips) == 1 and not closed and n > 1 and j == 0:
+                rows += [tips[0], p[j]]
+            elif len(tips) == 1 and not closed and n > 1 and j == n - 1:
+                rows += [p[j], tips[0]]
+            else:
+                rows.append(p[j])
+                for tip in tips:
+                    rows += [tip, p[j]]
+        out.append(np.asarray(rows) if len(rows) != n else p)
+    return out
+
+
 def best_paths(A: BaseGeometry, legacy: bool = False, spiral: bool = True, both: bool = False):
     """후보 경로들 중 형상 기준(여유 포함)을 만족하는 것 가운데 예상 적층시간이 가장 짧은 것.
     만족하는 후보가 없으면 IoU 가 가장 높은 것.
@@ -484,6 +562,38 @@ def best_paths(A: BaseGeometry, legacy: bool = False, spiral: bool = True, both:
             s = min(ok_ring, key=by_time)
             if best_ring is None or est_time(scored[s]) < est_time(best_ring[1]):
                 best_ring = (made[s], scored[s], names[s])
+    # 3) 그래도 없으면 모서리 밀기(SPUR_STEPS 참고): 지금까지 잰 후보 중 IoU 가 높은 것 몇 개에 넣어 본다. 목표를
+    #    넘은 것만 후보로 남기고, 그 가운데 예상 적층시간이 가장 짧은 것. 못 넘으면 아래에서 예전처럼 고른다.
+    if best is None or (both and best_ring is None):
+        pool = []
+        for ok_name, want in ((lambda nm: True, best is None),
+                              (lambda nm: not nm.startswith("linked"), both and best_ring is None)):
+            if want:
+                pool += sorted((s for s in scored if ok_name(names[s])),
+                               key=lambda s: (-scored[s]["iou"], s))[:SPUR_BASES]
+        spurred = []
+        for s0 in dict.fromkeys(pool):                # 순서를 지킨 채 겹친 것을 뺀다
+            sites = _spur_sites(A, made[s0])
+            for t in (SPUR_STEPS if sites else ()):
+                P = _spurred(made[s0], sites, t)
+                try:
+                    sc = score(A, P)
+                except _GEOS:
+                    continue
+                if meets(sc):
+                    slot = len(names)
+                    names.append(f"{names[s0]}+spur{t}")
+                    made[slot], scored[slot] = P, sc
+                    spurred.append(slot)
+                    break
+        by_time = lambda s: (est_time(scored[s]), s)
+        if best is None and spurred:
+            s = min(spurred, key=by_time)
+            best = (made[s], scored[s], names[s])
+        ok_ring = [s for s in spurred if not names[s].startswith("linked")]
+        if both and best_ring is None and ok_ring:
+            s = min(ok_ring, key=by_time)
+            best_ring = (made[s], scored[s], names[s])
     if best is None or (both and best_ring is None):
         # 그래도 없으면 전부 만들고 전부 쟀다 → IoU 가 가장 높은 것(같으면 앞선 자리)
         def top(ok_name):
