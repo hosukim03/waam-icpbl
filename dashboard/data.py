@@ -8,10 +8,11 @@ import streamlit as st
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNS = ROOT / "runs"
-SET_NAMES = {"tests": "공개 6", "check1010_v102": "연습 1", "novel1027": "연습 2"}
+SET_NAMES = {"tests": "공개 6", "check1010_v102": "연습 1", "novel1027": "연습 2", "parts1126": "연습 3"}
 SET_NOTE = {"tests": "교수님이 공개한 형상 6개(채점 대상과 같은 종류)",
             "check1010_v102": "우리 생성기의 21종류를 하나씩(21개), 설정을 고를 때 결과를 본 연습용",
-            "novel1027": "21종류와 다른 방식으로 만든 형상 21개(처음 보는 종류)"}
+            "novel1027": "21종류와 다른 방식으로 만든 형상 21개(처음 보는 종류)",
+            "parts1126": "실제 부품을 본뜬 형상 21개(연습 1·2와 다른 방식, 처음 보는 종류)"}
 # 대시보드에서 숨기는 묶음(2026-11-25): fresh1027 은 연습 1 과 같은 생성기에 시드만 바꾼 묶음이라 이름만 늘려
 # 헷갈리게 해서 뺀다. 자료(runs/evals, data/)는 그대로 둔다.
 HIDDEN_SETS = {"fresh1027"}
@@ -29,14 +30,15 @@ def rename_sets(text: str) -> str:
 # '실험 N · 무엇을 바꿨나'로 보인다. 여기 없는 새 실험은 폴더 이름을 그대로 쓴다.
 EXP_TITLES = {"1027a_80mm": "80 mm 조각 후보 더함", "1027b_fix": "점수 계산을 채점기와 맞춤",
               "1027c_adapt": "벽 두께 맞춤 경로 더함", "1028a_ls4": "국소 탐색 층마다 4번",
-              "1028b_ls2": "국소 탐색 층마다 2번", "1110a_ls2_adapt뺌": "벽 두께 맞춤 경로 뺌"}
+              "1028b_ls2": "국소 탐색 층마다 2번", "1110a_ls2_adapt뺌": "벽 두께 맞춤 경로 뺌",
+              "1126a_모서리밀기": "모서리 밀기 더함"}
 # 계산 시간 측정 기록 화면 이름(2026-11-25): 로그 파일 이름은 그대로 두고, 잰 순서(날짜, 같은 날은 모은 순서)대로
 # 번호를 붙여 '측정 N · 무엇을 쟀나 (묶음)'으로 보인다. 여기 없는 새 기록은 파일 이름을 쓴다.
 TIMING_TITLES = {"1027_공개_지금_A_B": "80 mm 조각 후보 비교", "1027_공개_B_고치기전후": "점수 계산 고치기 전후",
                  "1027_새방식_지금_B": "80 mm 조각 후보 비교", "1028_공개_국소탐색_횟수": "국소 탐색 횟수 비교",
-                 "1124_공개_코랩": "노트북과 코랩 비교"}
+                 "1124_공개_코랩": "노트북과 코랩 비교", "1126_연습3_노트북": "연습 3 첫 측정"}
 # 형상 칸에 보일 모양 이름(2026-11-25): 형상을 만든 설정(data/<묶음>/<형상>/desc.txt)의 영어 낱말 → 한국어. 이름은
-# 생성기에 적힌 것을 따른다(연습 1: tools/make_jobs_diverse.py 머리말, 연습 2: tools/make_jobs_novel.py 의 KO).
+# 생성기에 적힌 것을 따른다(연습 1: tools/make_jobs_diverse.py 머리말, 연습 2·3: tools/make_jobs_novel.py·make_jobs_parts.py 의 KO).
 SHAPE_KO = {"line": "막대", "ring": "원형 벽", "rect": "사각 벽", "block": "작은 속찬 덩어리", "wave": "물결선",
             "hexgrid": "벌집", "trigrid": "삼각 격자", "sqgrid": "사각 격자", "spiral": "나선", "truss": "삼각 트러스",
             "islands": "떨어진 섬 여러 개", "star": "별 모양 벽", "plate": "판+기둥", "vase": "비틀린 꽃병",
@@ -44,7 +46,11 @@ SHAPE_KO = {"line": "막대", "ring": "원형 벽", "rect": "사각 벽", "block
             "flange": "구멍 뚫린 원판", "slotplate": "긴 홈·구멍 판",
             "blob": "둥근 덩어리", "shell": "무작위 윤곽 벽", "tree": "갈라지는 벽", "cells": "불규칙 칸막이",
             "polywall": "꺾인 벽", "bars": "막대 조합 부품", "twins": "합쳐지거나 갈라지는 덩어리",
-            "holey": "구멍이 생겼다 사라지는 덩어리"}
+            "holey": "구멍이 생겼다 사라지는 덩어리",
+            "panel": "보강재 붙은 패널", "column": "H형강 기둥", "pipe": "플랜지 관", "reducer": "지름이 바뀌는 관",
+            "nozzle": "노즐", "housing": "상자형 하우징", "wheel": "바퀴(풀리)", "conrod": "커넥팅 로드",
+            "spanner": "스패너", "blade": "터빈 날개", "manifold": "유압 블록", "heatsink": "방열판",
+            "cylinder": "보강 원통", "facade": "창 뚫린 벽"}
 # 공개 6개는 만든 설정 파일이 없어, 이 형상들을 본떠 만든 연습 1 종류의 이름을 쓴다(make_jobs_diverse.py 머리말)
 PUBLIC_KO = {"01": "벌집", "02": "나선", "03": "삼각 트러스", "04": "판+기둥", "05": "비틀린 꽃병", "06": "L자+보강판"}
 LEVELS = ("쉬움", "중간", "어려움")
@@ -63,6 +69,8 @@ def shape_name(desc: str, set_name: str = "", shape: str = "") -> str:
             return f"{way} {SHAPE_KO[extra]}"
         if kind == "twins" and extra in ("합쳐짐", "갈라짐"):    # twins/합쳐짐|갈라짐 벽|속참
             return f"위로 가며 {'합쳐지는' if extra == '합쳐짐' else '갈라지는'} 덩어리"
+        if kind == "heatsink" and extra in ("fins", "pins"):     # heatsink/fins|pins (연습 3)
+            return f"{'지느러미' if extra == 'fins' else '핀'} 방열판"
         if kind in SHAPE_KO:
             return SHAPE_KO[kind]
     return ""
