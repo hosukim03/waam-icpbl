@@ -4,6 +4,8 @@ import streamlit as st
 from data import eval_index, run_table
 from theme import header
 
+NB = chr(0xA0)  # 줄바꿈 없는 공백(no-break space)
+
 header("실험 기록", "runs/evals 에 모은 실험 전체입니다. 실험은 한 순서대로 번호를 붙였고, 기록 폴더 이름은 실험 목록 표에 있습니다. "
        "실험을 새로 모으려면 `tools/collect_evals.py eval <결과 폴더> <이름> <묶음 폴더> \"<설명>\"` 를 돌립니다.")
 idx = eval_index()
@@ -36,14 +38,16 @@ for i, x in enumerate(order):
     row = {"실험": name_of[x]}
     for s in sets:
         if (x, s) not in cell:
-            row[labels[s]] = "-"
+            row[labels[s]] = ":gray[–]"  # 그냥 "-" 는 Markdown 목록 점(•)이 된다
             continue
         n_ok, n, ms = cell[(x, s)]
         prev = next((cell[(y, s)] for y in reversed(order[:i]) if (y, s) in cell), None)
-        d = "" if prev is None else f" ({(ms / prev[2] - 1) * 100:+.2f}%)"
-        row[labels[s]] = f"{'✅' if n_ok == n else '⚠️'} {n_ok}/{n} · {ms:,.0f} s{d}"
+        d = "" if prev is None else f" :gray[({(ms / prev[2] - 1) * 100:+.2f}%)]"
+        # 칸이 좁으면 괄호 앞에서만 줄이 바뀌게, 나머지 띄어쓰기는 줄바꿈 없는 공백(NB)으로
+        row[labels[s]] = f"{'✅' if n_ok == n else '⚠️'}{NB}{n_ok}/{n}{NB}·{NB}{ms:,.0f}{NB}s{d}"
     rows.append(row)
-st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+# st.dataframe 은 칸 글자를 줄바꿈하지 않아 묶음이 늘면 오른쪽 칸이 화면 밖으로 잘린다 → 줄바꿈되는 st.table
+st.table(pd.DataFrame(rows), hide_index=True)
 
 with st.expander("묶음별 자세히"):
     st.dataframe(pd.DataFrame(detail), hide_index=True, width="stretch", height=36 * (len(detail) + 1) + 4,
