@@ -8,7 +8,7 @@
   r1c160 / r2c160 : 일감을 로봇 1대·2대에게만 준다 (좁은 형상은 서로 비켜 주는 시간이 더 커서 유리)
   r3c80 / r3c160 / r3c220 : 로봇 3대, 용접선을 80·160·220mm 조각으로 끊는다 (조각이 길수록 아크 재점화가 준다)
   ...bal  : 부하 균형 배정(층 무게중심 기준 경계각 최적화). 없으면 작업대 중심 부채꼴
-  r3tuned : CEM 으로 찾은 설정값(조각 41.4mm 등)
+  r3tuned : CEM 으로 찾은 설정값(조각 41.4mm 등). 2026-11-28 부터 후보 목록(MULTI)에는 넣지 않는다
 
 usage:
   python portfolio.py <job_dir> <out_dir> [--variants v7,v8,v8bal] [--workers 3] [--keep]
@@ -32,7 +32,7 @@ VPY = ROOT / "WAAM_Validator" / ".venv" / "Scripts" / "python.exe"
 
 # tune_cem.py 로 학습 형상(train_div 30개)에서 찾은 V8 설정값. 이 값만 단독으로 쓰면 처음 보는
 # 형상에서 오히려 나쁘지만(검증 +0.3%), 설정으로 '추가'하면 이 설정이 잘 맞는 형상에서만 뽑혀
-# 검증 20개 −0.93%. 그래서 설정(r3tuned)으로만 둔다.
+# 검증 20개 −0.93%. 그래서 설정(r3tuned)으로만 뒀다(2026-11-28 거의 뽑히지 않아 후보 목록에서도 뺐다, MULTI 참고).
 # 기본으로 붙이는 인자
 NP = ["--no-park-layer", "--link-gap", "9"]
 # 후보 25: 막혔을 때 큐 앞 25개까지 훑어 바로 시작할 조각을 찾는다(04 −13.2%). 전 설정에 넣으면
@@ -103,7 +103,9 @@ DEFAULT = ["sp_r3c220balm5", "sp_r1c160", "r3c160m5", "r3c220bal", "r3tuned", "r
 PAIR_EPS = 0.01
 SOLO = ["sp_r1c160", "sp_r1c160rp"]                       # 한 대로 다 닿는다 → 1대 설정
 TURN = ["sp_r2c160m5arp", "sp_r2c160m5a", "sp_r3c220balm5rp"]   # 한 대로는 안 닿는다 → 번갈아 적층
-MULTI = ["sp_r2c160m5a", "sp_r3c220balm5rp", "r3tuned", "sp_r1c160"]   # 여러 대가 나눠 적층
+MULTI = ["sp_r2c160m5a", "sp_r3c220balm5rp", "sp_r1c160"]   # 여러 대가 나눠 적층
+# r3tuned(CEM 숫자)는 2026-11-28 MULTI 에서 뺐다: 최근 기록(1110a·1126a) 형상 90개 중 3개(fresh1027 11, 연습 3
+# 09·10)에서만 뽑혔고, 뺐을 때 늘어나는 makespan 은 묶음 합계로 0.2% 이하로 어림했다. 그만큼 계산을 아낀다.
 
 
 def select_variants(job: Path) -> tuple[list[str], dict]:

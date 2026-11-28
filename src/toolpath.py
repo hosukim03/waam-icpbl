@@ -431,7 +431,8 @@ def best_paths(A: BaseGeometry, legacy: bool = False, spiral: bool = True, both:
     답은 후보를 전부 만들어 전부 재는 _best_paths_all 과 같다. 다만 예상 적층시간이 짧은 후보부터 재고,
     기준을 처음 통과한 후보에서 멈춘다(그보다 긴 후보는 이길 수 없다). 빈틈 보강처럼 만드는 데 비싼 후보는
     바탕 경로의 시간을 하한으로 두고(보강하면 길어지기만 한다) 차례가 왔을 때 만든다.
-    시간이 같으면 원래 후보 순서(slot)가 앞선 것을 고르는 것도 같다."""
+    시간이 같으면 원래 후보 순서(slot)가 앞선 것을 고르는 것도 같다.
+    돌려주기 직전에 이미 쌓는 줄 위에 다시 찍는 점 줄을 뺀다(drop_dots, 2026-11-28)."""
     if legacy:
         return _best_paths_all(A, legacy=True, spiral=spiral, both=both)
     import heapq
@@ -604,9 +605,54 @@ def best_paths(A: BaseGeometry, legacy: bool = False, spiral: bool = True, both:
             best = top(lambda nm: True)
         if both and best_ring is None:
             best_ring = top(lambda nm: not nm.startswith("linked"))
+    best_nd = _no_dots(A, best)                       # 이미 쌓는 줄 위에 다시 찍는 점 줄 빼기(drop_dots 참고)
     if both:
-        return best, best_ring
-    return best
+        return best_nd, (best_nd if best_ring is best else _no_dots(A, best_ring))
+    return best_nd
+
+
+DOT_LEN = 1.0     # 이보다 짧은 줄은 사실상 점이다(벌집·격자처럼 얇은 벽이 만나는 모서리에 0~0.3 mm 짜리가 생긴다)
+DOT_NEAR = 0.5    # 점의 양 끝이 다른 줄에서 이 거리 안이면 이미 쌓는 자리 위에 다시 찍는 점이다
+
+
+def _plen(p: np.ndarray) -> float:
+    p = np.asarray(p)
+    return float(np.hypot(*np.diff(p[:, :2], axis=0).T).sum()) if len(p) > 1 else 0.0
+
+
+def _pt_line(pt: np.ndarray, q: np.ndarray) -> float:
+    """점에서 꺾은선까지의 가장 짧은 거리."""
+    q = np.asarray(q)[:, :2]
+    a, ab = q[:-1], np.diff(q, axis=0)
+    den = (ab ** 2).sum(1)
+    t = np.where(den > 0, ((pt - a) * ab).sum(1) / np.where(den > 0, den, 1.0), 0.0).clip(0.0, 1.0)
+    return float(np.hypot(*(pt - (a + t[:, None] * ab)).T).min())
+
+
+def drop_dots(A: BaseGeometry, P: list[np.ndarray]) -> tuple[list[np.ndarray], dict] | None:
+    """이미 쌓는 줄 위에 다시 찍는 '점 줄'(길이 DOT_LEN 미만, 양 끝이 다른 줄에서 DOT_NEAR 안)을 뺀 (경로, 점수).
+    중심선을 잇다 남은 부스러기라 빼도 모양은 거의 그대로이고, 로봇이 점 하나 찍으러 오가는 일이 준다.
+    뺄 것이 없거나, 빼면 층 형상 목표(meets)를 못 넘으면 None(원래 경로를 쓴다).
+    2026-11-28 연습 63개: 12개 형상에 있었고 makespan 합계 −0.036%(연습 1 08 삼각 격자 −0.96%, 연습 1 10 물결선
+    −0.72%, 나빠진 형상은 연습 2 08 +0.05% 하나), 모두 PASS·충돌 0. 공개 01 벌집 −0.41%."""
+    longs = [np.asarray(p) for p in P if len(p) > 1 and _plen(p) >= DOT_LEN]
+    if not longs:
+        return None
+    keep = [p for p in P if not (_plen(p) < DOT_LEN and all(
+        min(_pt_line(np.asarray(p)[e, :2], q) for q in longs) <= DOT_NEAR for e in (0, -1)))]
+    if len(keep) == len(P):
+        return None
+    try:
+        sc = score(A, keep)
+    except _GEOS:
+        return None
+    return (keep, sc) if meets(sc) else None
+
+
+def _no_dots(A: BaseGeometry, res):
+    """best_paths 결과 (경로, 점수, 이름)에서 점 줄을 뺀 것(뺄 것이 없으면 그대로)."""
+    r = drop_dots(A, res[0]) if res is not None and res[0] else None
+    return res if r is None else (r[0], r[1], res[2])
 
 
 def heap_lb(heap, slot: int) -> float:
