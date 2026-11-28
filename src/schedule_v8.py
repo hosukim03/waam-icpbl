@@ -56,6 +56,20 @@ PRUNE_MARGIN = 1.15    # 예상 makespan 이 최선의 이 배수를 넘어야 �
 # 충돌 검사가 한도를 크게 넘을 수 있어(80 mm 에서 연습 1 19 가 112만 번 = 한도의 3.5배), 끝까지 갔을 때의 검사 횟수
 # (지금까지 쓴 횟수 ÷ 진행한 적층 길이 비율)가 남은 몫(soft_cap)을 넘을 것 같으면 남은 층은 --chunk-safe 길이로 짠다.
 SAFE_MIN_FRAC = 0.05   # 적층 길이로 이만큼 진행한 뒤부터 어림한다(너무 이르면 어림이 흔들림)
+# 긴 조각으로 바꾼 뒤에도(바꾼 뒤 SAFE_MIN_FRAC 만큼 더 진행해 잰 속도로) 끝까지의 어림이 남은 몫의 이 배수를 넘으면 그
+# 후보를 멈추고 다음 후보로 넘어간다(soft_abort, 마지막 후보는 멈추지 않음). 3대 계획 자체가 무거운 형상(연습 1 19:
+# 3층부터 220 mm 로 바꿔도 그 계획 하나에 58만 번)에서 첫 후보가 한도를 크게 넘는 것을 막는다. 조금 넘을 때 멈추면
+# 손해다: 1.2 로 했을 때 연습 4 01 은 2대 계획(예상 33.5만 > 몫 26.8만×1.2)을 멈추고 더 무거운 3대 계획을 끝까지 짜서
+# 합계 45.3만 번(멈추지 않으면 40만 번). 연습 1 19 는 예상이 몫의 2.8배라 1.5 에서도 멈춘다.
+SAFE_ABORT = 1.5
+# 시간 안전장치(2026-11-29): 코랩 무료 CPU 는 빠르기가 그때그때 달라(11-29 Xeon 2.20GHz 에서 공개 04 가 400 s, 11-24 에는
+# 342 s) 충돌 검사 횟수 한도만으로는 5분을 못 지킨다. solve.py 가 정한 마감 시각(deadline)을 넘을 것 같으면(바뀐 설정으로
+# SAFE_MIN_FRAC 만큼 짠 속도로 끝까지 어림, 또는 이미 넘음):
+#   time_mode="stop"  (두 번째 후보부터·국소 탐색): OverTime 으로 멈춘다(이미 있는 계획을 쓴다)
+#   time_mode="relax" (첫 후보): 계획이 하나는 있어야 하므로 멈추지 않고, 남은 층을 더 빨리 짜는 설정으로 바꾼다
+TIME_RELAX = [{"chunk_x": 2.0, "lookahead": 6, "max_tries": None},   # 1단계: 조각 2배, 앞쪽 보기 6개
+              {"chunk_x": 4.0, "lookahead": 1, "max_tries": 8}]      # 2단계: 조각 4배, 앞쪽 보기 1개, 시작 시각 후보 8개
+TIME_EVENTS = []       # 마지막 run() 에서 시간 안전장치가 바꾼 것 [(층, 설명)] (solve.py 가 읽는다)
 SWITCHED_AT = None     # 마지막 run() 에서 남은 층을 안전 길이로 바꾼 층(안 바꿨으면 None, solve.py 가 읽는다)
 
 
@@ -976,6 +990,14 @@ class Pruned(Exception):
     """이미 다른 설정보다 느려져 더 계산할 필요가 없다."""
 
 
+class OverBudget(Pruned):
+    """첫 후보 안전장치: 긴 조각으로 바꿔도 계산량 한도를 크게 넘을 것 같아 멈춘다(다음 후보로 넘어간다)."""
+
+
+class OverTime(Pruned):
+    """시간 안전장치: 마감 시각 전에 못 끝낼 것 같아 멈춘다(두 번째 후보부터·국소 탐색)."""
+
+
 def apply_config(cfg, arc: bool = False) -> None:
     """config 의 이동 속도·팔 도달 거리·비드 폭으로 모듈 상수를 맞춘다.
     속도는 채점기 허용 오차 안에서 가장 빠르게 쓴다(이동 150 → 163.5, 적층 8 → 8.72 mm/s)."""
@@ -998,15 +1020,17 @@ def prepare(job: Path):
 
 
 def run(job: Path, opts, policy=None, pre=None, path_cache=None, only=None, bound=None, work_cap=None,
-        soft_cap=None):
+        soft_cap=None, soft_abort=False, deadline=None, time_mode="stop"):
     """pre = prepare() 결과(없으면 여기서 읽는다), path_cache = {층: (경로, IoU)},
     only = 이 층들만 계획한다(설정을 짧게 시험할 때), bound = 이미 끝난 설정의 최선 makespan(가지치기,
     --bound-file 과 같은 규칙), work_cap = 이 계획에 쓸 충돌 검사 횟수 한도(넘으면 층을 시작할 때 Pruned 로
     멈춘다, 계산량 한도), soft_cap = 첫 후보 안전장치(끝까지 갔을 때의 검사 횟수가 이것을 넘을 것 같으면 남은 층은
     opts.chunk_safe 로 짠다; opts.switch_at 이 있으면 어림하지 않고 그 층부터 바꾼다 = 국소 탐색이 같은 계획을
-    다시 짤 때). 나머지는 명령행 실행과 같다."""
-    global SWITCHED_AT
-    SWITCHED_AT = None
+    다시 짤 때), soft_abort = 바꾼 뒤에도 어림이 soft_cap 의 SAFE_ABORT 배를 넘으면 OverBudget 으로 멈춘다(마지막
+    후보가 아닐 때), deadline = 시간 안전장치의 마감 시각(time.perf_counter() 값, 위 TIME_RELAX 설명), time_mode =
+    "stop"(넘을 것 같으면 OverTime) / "relax"(넘을 것 같으면 남은 층을 더 빨리 짜는 설정으로). 나머지는 명령행 실행과 같다."""
+    global SWITCHED_AT, TIME_EVENTS
+    SWITCHED_AT, TIME_EVENTS = None, []
     c_run = CHECKS
     cfg, n, layers = pre if pre is not None else prepare(job)
     apply_config(cfg, bool(opts.arc))
@@ -1059,10 +1083,13 @@ def run(job: Path, opts, policy=None, pre=None, path_cache=None, only=None, boun
     guard = bool(chunk_safe) and float(chunk_safe) > float(opts.chunk) and (soft_cap is not None or switch_at is not None)
     # 예상 완료 시각으로 가지치기하거나 안전장치로 어림하려면 전체 적층 길이가 필요하다(경로 캐시가 있을 때만)
     lens = {}
-    if (bound_file or bound is not None or guard) and path_cache is not None:
+    if (bound_file or bound is not None or guard or deadline is not None) and path_cache is not None:
         lens = {k: sum(plen(np.asarray(Q)) for Q in path_cache[k][0])
                 for k in path_cache if path_cache[k][0]}
     total_len, done_len = float(sum(lens.values())), 0.0
+    sw_used = sw_len = 0.0                           # 안전장치로 길이를 바꾼 때까지 쓴 검사 횟수·적층 길이
+    t_mark, len_mark, relax_lv = time.perf_counter(), 0.0, 0   # 시간 안전장치: 설정을 바꾼 시각·적층 길이, 단계
+    chunk_base = max(float(opts.chunk), float(chunk_safe or 0.0))
     for k in range(n):
         A = layers[k]
         if A.is_empty or (only is not None and k not in only):
@@ -1079,6 +1106,33 @@ def run(job: Path, opts, policy=None, pre=None, path_cache=None, only=None, boun
             if hit:                                  # 이미 짠 층은 그대로 두고, 이 층부터 긴 조각으로
                 opts.chunk = float(chunk_safe)
                 SWITCHED_AT = k
+                sw_used, sw_len = CHECKS - c_run, done_len
+        elif guard and soft_abort and switch_at is None and total_len > 0:
+            # 긴 조각으로 바꾼 뒤 SAFE_MIN_FRAC 만큼 더 진행했으면, 바꾼 뒤의 속도로 끝까지를 다시 어림해 몫을 크게
+            # 넘으면 이 후보를 멈춘다(다음 후보가 첫 후보가 된다)
+            used, dl = CHECKS - c_run, done_len - sw_len
+            if dl / total_len >= SAFE_MIN_FRAC:
+                proj = used + (used - sw_used) / dl * (total_len - done_len)
+                if proj > soft_cap * SAFE_ABORT:
+                    raise OverBudget(f"layer {k}: 긴 조각으로도 예상 {proj:.0f} > 몫 {soft_cap:.0f}×{SAFE_ABORT}")
+        if deadline is not None and only is None:
+            # 시간 안전장치: 이미 마감을 넘었거나, 지금 설정으로 SAFE_MIN_FRAC 만큼 짠 속도로 끝까지 가면 넘을 것 같으면
+            now = time.perf_counter()
+            over = now > deadline
+            if not over and total_len > 0 and (done_len - len_mark) / total_len >= SAFE_MIN_FRAC:
+                over = now + (now - t_mark) / (done_len - len_mark) * (total_len - done_len) > deadline
+            if over and time_mode == "stop":
+                raise OverTime(f"layer {k}: 마감까지 {deadline - now:.0f} s 남음")
+            if over and relax_lv < len(TIME_RELAX):
+                cf = TIME_RELAX[relax_lv]
+                opts.chunk = max(float(opts.chunk), chunk_base * cf["chunk_x"])
+                opts.lookahead = min(int(opts.lookahead), cf["lookahead"])
+                if cf["max_tries"]:
+                    chk.max_tries = min(chk.max_tries, cf["max_tries"])
+                relax_lv += 1
+                TIME_EVENTS.append((k, f"{relax_lv}단계 조각 {opts.chunk:g} mm 앞쪽 {opts.lookahead}개 "
+                                       f"(마감까지 {deadline - now:.0f} s)"))
+                t_mark, len_mark = now, done_len
         if bound_file or bound is not None:
             # 가지치기: 포트폴리오에서 먼저 끝난 설정의 makespan 이 여기 적힌다. 지금 로봇 시각이 이미
             # 그보다 크면 이 설정은 절대 이길 수 없으므로(시각은 줄지 않음) 바로 멈춘다. 결과는 그대로.

@@ -53,6 +53,7 @@ import time
 from pathlib import Path
 
 import numpy as np
+import shapely
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -68,6 +69,13 @@ SAMPLE2_FRAC = 0.05  # 남은 후보가 둘 이상이면 2차로 전체 층의 �
 SAMPLE2_MIN = 8     # (05 는 350층 중 106층에서만 설정 차이가 나서 1차 4층으로는 셋이 똑같이 나왔다)
 BUDGET = 320_000    # 계산량 한도(충돌 검사 횟수, 0=한도 없음): 후보 계획과 국소 탐색을 합쳐 이만큼만 쓴다(위 설명)
 CHUNK = None        # (--chunk, 시험용) 2·3대 계획의 조각 길이(mm). 원래 길이는 첫 후보 안전장치 길이(--chunk-safe)로 쓴다
+# 시간 안전장치(2026-11-29): 코랩에서 형상 하나당 5분(프로그램 시작·파일 쓰기 포함). 이 프로그램이 시작한 뒤 DEADLINE 초
+# 안에 계획을 끝낸다. 두 번째 후보부터는 남은 시간으로 짤 수 있는 충돌 검사 횟수(지금까지 잰 1번당 시간 × TIME_SAFETY)
+# 안에서만 짜고, 그래도 넘을 것 같으면 멈춘다. 첫 후보는 남은 층을 더 빨리 짜는 설정으로 바꾼다(schedule_v8.TIME_RELAX).
+# 국소 탐색은 고른 계획을 다시 짜는 데 든 시간만큼 남아 있을 때만 하고, 넘을 것 같으면 멈추고 다듬기 전 계획을 쓴다.
+# 빠른 컴퓨터에서는 마감에 닿지 않아 결과가 그대로다. 이 컴퓨터에서 여러 개를 동시에 돌리는 실험은 --deadline 0 으로 끈다.
+DEADLINE = 260.0
+TIME_SAFETY = 0.85
 
 
 def candidates(f: dict) -> list[str]:
@@ -78,16 +86,34 @@ def candidates(f: dict) -> list[str]:
 
 
 REUSE_DIFF = 0.005  # 아래층과 단면 차이(대칭차 면적 ÷ 면적)가 이보다 작으면 아래층 경로를 다시 써 본다
+# 경로 만들 때만 단면 단순화(2026-11-29): 곡면을 잘게 나눈 STL 은 층 단면 꼭짓점이 수천 개라(연습 4 01 평균 8,132개, 19
+# 5,045개) 안쪽으로 줄이는 계산(buffer)이 경로 시간의 대부분이다. 꼭짓점이 SIMPLIFY_MIN_VERTS 보다 많은 층만 SIMPLIFY_TOL
+# 로 단순화한 단면으로 경로를 고른다(0.05 mm 면 꼭짓점이 절반, 넓이 차이 0.005% 이하. 비드 폭 8 mm 에 비해 아주 작다).
+# 층 8개씩 잰 경로 시간: 연습 4 01 −51%, 19 −27%, 연습 3 09 −22%(원래 단면으로 채점해도 모두 목표 통과, 쌓는 시간 ±0.1%).
+# 꼭짓점이 2,000개 넘는 형상 21개를 끝까지 풀면 21개 모두 PASS, 경로 시간 −73%(대략), makespan 합계 +0.21% 였지만 형상마다
+# 흔들림이 컸다(공개 02 +5.3%, 연습 1 13 +13.6%, 연습 3 17 −5.0%). 경로가 조금만 달라져도 계획이 달라지기 때문이다. 그래서
+# 기본으로는 끄고(--simplify 0.05 로 켬), 경로 만들기가 마감에 가까울 때만 쓰는 방법을 따로 정한다.
+SIMPLIFY_TOL = 0.0
+SIMPLIFY_MIN_VERTS = 2000
+
+
+def for_paths(A):
+    """경로를 고를 단면: 꼭짓점이 많으면 단순화한 단면(올바르지 않거나 비면 원래 단면)."""
+    if SIMPLIFY_TOL <= 0 or shapely.get_num_coordinates(A) <= SIMPLIFY_MIN_VERTS:
+        return A
+    G = A.simplify(SIMPLIFY_TOL, preserve_topology=True)
+    return G if (not G.is_empty and G.is_valid) else A
 
 
 def build_paths(layers: dict, n: int, need: set[str], reuse: bool = False) -> dict:
     """{'sp': {층: (경로, IoU)}, 'ring': {...}}. toolpath_cache.py 를 코어 하나로 돌린 것과 같다.
     reuse: 아래층과 단면이 거의 같고(REUSE_DIFF) 아래층 경로가 이 층의 형상 목표도 통과하면 그대로 쓴다
-    (toolpath_cache 의 --reuse 와 같은 규칙, 점수 재기는 경로 고르기보다 수십 배 싸다)."""
+    (toolpath_cache 의 --reuse 와 같은 규칙, 점수 재기는 경로 고르기보다 수십 배 싸다).
+    경로는 for_paths 단면(꼭짓점이 많으면 단순화)으로 고른다."""
     out = {t: {} for t in need}
     prev, prevA = None, None                        # prev = {묶음: 경로}
     for k in range(n):
-        A = layers[k]
+        A = for_paths(layers[k])
         if A.is_empty:
             continue
         got = {}
@@ -166,8 +192,9 @@ def best_of_all(names: list[str], trial, plan, layers: dict, n: int, m1: int = S
         order = sorted((nm for nm in names if trials[nm] <= lo * (1 + KEEP)),
                        key=lambda nm: (round(trials[nm], 6), prio[nm], rank[nm]))
     done, best, kept = {}, None, None
-    for nm in order:
-        r = plan(nm, None if best is None else done[best])
+    for i, nm in enumerate(order):
+        # 첫 후보 안전장치: 아직 끝난 계획이 없는데 마지막 후보면, 계획이 하나는 있어야 하므로 멈추지 않고 끝까지 짠다
+        r = plan(nm, None if best is None else done[best], best is None and i == len(order) - 1)
         if r is None:
             continue
         done[nm] = r[0]
@@ -196,6 +223,7 @@ def options(name: str, job: Path, out: Path):
 
 
 def main() -> int:
+    global CHUNK, SIMPLIFY_TOL
     ap = argparse.ArgumentParser()
     ap.add_argument("job")
     ap.add_argument("out")
@@ -215,9 +243,14 @@ def main() -> int:
                     help="(실험용) 두 대 이상이 동시에 쌓을 수 있는 형상의 후보 끝에 이 설정들을 더한다(쉼표로 구분)")
     ap.add_argument("--chunk", type=float, default=None,
                     help="(시험용) 2·3대 계획의 조각 길이(mm). 원래 길이(2대 160·3대 220)는 첫 후보 안전장치 길이로 쓴다")
+    ap.add_argument("--deadline", type=float, default=DEADLINE,
+                    help=f"시간 안전장치: 이 프로그램이 시작한 뒤 이 초 안에 계획을 끝낸다(기본 {DEADLINE:g}, 0=끔. "
+                         "이 컴퓨터에서 여러 개를 동시에 돌리는 실험은 0)")
+    ap.add_argument("--simplify", type=float, default=SIMPLIFY_TOL,
+                    help=f"(시험용) 경로 만들 때 꼭짓점이 {SIMPLIFY_MIN_VERTS:,}개 넘는 단면을 이 길이(mm)로 단순화(기본 0 = 끔)")
     a = ap.parse_args()
-    global CHUNK
     CHUNK = a.chunk
+    SIMPLIFY_TOL = a.simplify
     toolpath.FAST_VORONOI = not a.slow_voronoi
     job, out = Path(a.job).resolve(), Path(a.out).resolve()
     T = {}
@@ -246,10 +279,15 @@ def main() -> int:
 
     cost = {}                                       # 후보별로 끝까지 계획하는 데 든 충돌 검사 횟수
     switched = {}                                   # 첫 후보 안전장치로 남은 층을 긴 조각으로 바꾼 층(후보별)
+    stopped = {}                                    # 첫 후보 안전장치로 멈추고 다음 후보로 넘어간 까닭(후보별)
+    late, relaxed, tcost = {}, {}, {}               # 시간 안전장치: 멈춘 까닭, 첫 후보 설정 바꿈, 후보별 계획 시간
+    dl = t0 + a.deadline if a.deadline > 0 else None   # 시간 안전장치 마감 시각
 
-    def plan(nm, bound):
+    def plan(nm, bound, must_finish=False):
         c0 = s8.CHECKS
+        tp = time.perf_counter()
         cap = soft = None
+        o = options(nm, job, out)
         if a.budget > 0 and cost:
             # 계산량 한도: 첫 후보는 계획이 하나는 있어야 하므로 끝까지 계획하고, 그다음 후보부터는 한도에서
             # 남은 만큼만 계획한다(넘으면 가지치기처럼 멈추고 고르지 않는다)
@@ -257,19 +295,42 @@ def main() -> int:
             if cap <= 0:
                 return None
         elif a.budget > 0:
-            # 첫 후보 안전장치: 끝까지 짜되, 남은 몫을 넘을 것 같으면 남은 층은 그 설정의 --chunk-safe 길이로 짠다
+            # 첫 후보 안전장치: 끝까지 짜되, 남은 몫을 넘을 것 같으면 남은 층은 그 설정의 --chunk-safe 길이로 짠다.
+            # 그래도 크게 넘을 것 같으면 멈추고 다음 후보로 넘어간다(must_finish = 마지막 후보면 끝까지)
             soft = a.budget - (c0 - c_plan)
+            if soft <= 0 and not must_finish and getattr(o, "chunk_safe", None):
+                stopped[nm] = "남은 몫 없음"
+                return None
+        if dl is not None and cost:
+            # 시간 안전장치(두 번째 후보부터): 남은 시간으로 짤 수 있는 횟수(지금까지 계획에 든 시간 ÷ 충돌 검사 횟수로
+            # 1번당 시간을 잼) 안에서만 짠다
+            per = (tp - t_plan) / max(c0 - c_plan, 2000)
+            cap_t = (dl - tp) / per * TIME_SAFETY
+            cap = cap_t if cap is None else min(cap, cap_t)
+            if cap <= 0:
+                late[nm] = "남은 시간 없음"
+                return None
         try:
-            robots, mk, *_ = s8.run(job, options(nm, job, out), pre=pre, path_cache=caches[VARIANTS[nm][2]],
-                                    bound=bound, work_cap=cap, soft_cap=soft)
+            robots, mk, *_ = s8.run(job, o, pre=pre, path_cache=caches[VARIANTS[nm][2]],
+                                    bound=bound, work_cap=cap, soft_cap=soft, soft_abort=not must_finish,
+                                    deadline=dl, time_mode="stop" if cost else "relax")
+        except s8.OverBudget as ex:
+            stopped[nm] = str(ex)
+            return None
+        except s8.OverTime as ex:
+            late[nm] = str(ex)
+            return None
         except s8.Pruned:
             return None
         cost[nm] = s8.CHECKS - c0
+        tcost[nm] = time.perf_counter() - tp
         if s8.SWITCHED_AT is not None:
             switched[nm] = s8.SWITCHED_AT
+        if s8.TIME_EVENTS:
+            relaxed[nm] = list(s8.TIME_EVENTS)
         return mk, robots
 
-    c_plan = s8.CHECKS
+    c_plan, t_plan = s8.CHECKS, time.perf_counter()
     best, (mk, robots), trial, full, only = best_of_all(names, trial_run, plan, layers, n, a.sample)
     T["plan"] = time.perf_counter() - t
     used = s8.CHECKS - c_plan                       # 짧은 시험 + 끝까지 계획(멈춘 후보 포함)에 쓴 충돌 검사 횟수
@@ -285,6 +346,9 @@ def main() -> int:
         left = None if a.budget <= 0 else a.budget - used - cost[best]
         if left is not None and left <= 0:
             ls_line = f"ls\tskip budget={a.budget} plan={used} base={cost[best]}"
+        elif dl is not None and (best in relaxed or time.perf_counter() + 1.1 * tcost.get(best, 0.0) > dl):
+            # 시간 안전장치: 고른 계획을 다시 짜는 시간(처음 짤 때 든 시간)만큼도 남지 않았으면 국소 탐색을 하지 않는다
+            ls_line = f"ls\tskip time left={dl - time.perf_counter():.0f}s base={tcost.get(best, 0.0):.0f}s"
         else:
             t = time.perf_counter()
             o = options(best, job, out)
@@ -292,14 +356,19 @@ def main() -> int:
             o.switch_at = switched.get(best)        # 안전장치로 바꾼 계획이면 같은 층부터 긴 조각으로(같은 기준 계획)
             o.ls_rate = None if left is None else left / max(cost[best], 1)
             c_ls = s8.CHECKS
-            r2, mk2, *_ = s8.run(job, o, pre=pre, path_cache=caches[VARIANTS[best][2]])
+            try:
+                r2, mk2, *_ = s8.run(job, o, pre=pre, path_cache=caches[VARIANTS[best][2]], deadline=dl,
+                                     time_mode="stop")
+            except s8.OverTime as ex:                # 시간 안전장치: 다듬기 전 계획을 쓴다
+                r2, ls_line = None, f"ls\tstop time {ex}"
             ls_checks = s8.CHECKS - c_ls
             T["ls"] = time.perf_counter() - t
-            ls_line = f"ls\tbefore={mk:.3f} after={mk2:.3f} used={int(mk2 < mk)}"
-            if left is not None:
-                ls_line += f" budget={a.budget} left={left}"
-            if mk2 < mk:
-                mk, robots = mk2, r2
+            if r2 is not None:
+                ls_line = f"ls\tbefore={mk:.3f} after={mk2:.3f} used={int(mk2 < mk)}"
+                if left is not None:
+                    ls_line += f" budget={a.budget} left={left}"
+                if mk2 < mk:
+                    mk, robots = mk2, r2
     s8.write(job, out, robots)
     T["total"] = time.perf_counter() - t0
 
@@ -320,6 +389,13 @@ def main() -> int:
         lines.append(f"chunk\t{CHUNK:g}")              # (--chunk) 2·3대 계획의 조각 길이
     for nm, k in switched.items():
         lines.append(f"safe\t{nm} layer={k}")       # 첫 후보 안전장치: 이 층부터 긴 조각으로 짰다
+    for nm, why in stopped.items():
+        lines.append(f"safe\t{nm} stop {why}")      # 첫 후보 안전장치: 긴 조각으로도 크게 넘을 것 같아 멈춤
+    for nm, evs in relaxed.items():                 # 시간 안전장치: 첫 후보의 남은 층을 더 빨리 짜는 설정으로
+        for k, what in evs:
+            lines.append(f"deadline\t{nm} layer={k} {what}")
+    for nm, why in late.items():                    # 시간 안전장치: 두 번째 후보부터 멈춤
+        lines.append(f"deadline\t{nm} stop {why}")
     if ls_line:
         lines.append(ls_line)
     lines.append(f"checks\tplan={used} ls={ls_checks} total={used + ls_checks}")
@@ -328,8 +404,13 @@ def main() -> int:
     print(f"{job.name}: 후보 {len(names)}개 → {best} makespan={mk:.1f}s 계산 {T['total']:.1f}s "
           f"(자르기 {T['slice']:.1f} 특징 {T['features']:.1f} 경로 {T['paths']:.1f} 시험·계획 {T['plan']:.1f}"
           + (f" 국소 탐색 {T['ls']:.1f}" if "ls" in T else "") + f") 충돌 검사 {used + ls_checks:,}번"
-          + (" (한도로 국소 탐색 건너뜀)" if ls_line and ls_line.startswith("ls\tskip") else "")
-          + "".join(f" (안전장치: {nm} 층 {k}부터 긴 조각)" for nm, k in switched.items()),
+          + (" (한도로 국소 탐색 건너뜀)" if ls_line and ls_line.startswith("ls\tskip budget") else "")
+          + (" (시간으로 국소 탐색 건너뜀)" if ls_line and ls_line.startswith("ls\tskip time") else "")
+          + (" (시간으로 국소 탐색 멈춤)" if ls_line and ls_line.startswith("ls\tstop time") else "")
+          + "".join(f" (안전장치: {nm} 층 {k}부터 긴 조각)" for nm, k in switched.items())
+          + "".join(f" (안전장치: {nm} 멈춤)" for nm in stopped)
+          + "".join(f" (시간 안전장치: {nm} {len(evs)}단계까지 빠르게)" for nm, evs in relaxed.items())
+          + "".join(f" (시간 안전장치: {nm} 멈춤)" for nm in late),
           flush=True)
     return 0
 

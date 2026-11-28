@@ -380,10 +380,22 @@ def make_one(r, name):
 
 
 def validator_accepts(d: Path) -> bool:
-    """채점기의 형상 로더로 읽어 보고, 모든 층 단면이 비어 있지 않은지 확인."""
+    """채점기의 형상 로더로 읽어 보고, 모든 층 단면이 비어 있지 않은지 확인.
+
+    채점기 로더와 같은 정리(꼭짓점 합치기, 퇴화·중복 면 지우기) 뒤에도 닫혀 있어야 한다(2026-11-29). 닫혀 있지 않으면
+    로더가 메시 고치기(trimesh.repair.fill_holes, networkx 필요)를 하는데, networkx 가 있는 컴퓨터(코랩)는 고쳐서 받아들이고
+    없는 컴퓨터(이 노트북의 WAAM venv)는 버려서, 같은 시드로도 다른 형상 묶음이 만들어졌다(연습 3 은 05번부터 달라짐).
+    고쳐야만 쓸 수 있는 형상은 어디서든 버린다. 이 노트북에서는 원래 버려지던 형상이라 만들어지는 묶음은 그대로다."""
     from waam_validator.config.loader import load_config
     from waam_validator.shape.target import load_target_mesh, slice_target_layers
     try:
+        t = trimesh.load(d / "target.stl", process=False)
+        t.merge_vertices()
+        t.update_faces(t.nondegenerate_faces())
+        t.update_faces(t.unique_faces())
+        t.remove_unreferenced_vertices()
+        if not t.is_watertight:
+            return False
         cfg = load_config(d / "config.yaml")
         m = load_target_mesh(d / "target.stl", cfg)
         n = int(np.ceil((m.bounds[1, 2] - cfg.process.build_plane_z_mm) / cfg.process.layer_height_mm - 1e-9))
