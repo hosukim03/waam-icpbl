@@ -19,7 +19,8 @@ portfolio.py 와 같다. 계산을 줄이는 방법은 세 가지다.
   5) 고른 설정이 부채꼴 배정을 쓰면 국소 탐색으로 한 번 더 계획하고, 더 짧으면 그것을 쓴다
   4)·5)는 계산량 한도(BUDGET, 충돌 검사 횟수) 안에서만 한다(아래)
 
-usage: python solve.py <job_dir> <out_dir> [--eval] [--ls N] [--budget N]   (WAAM venv 파이썬)
+usage: python solve.py <job_dir> <out_dir> [--eval] [--ls N] [--budget N] [--chunk N]   (WAAM venv 파이썬)
+  --chunk N  (시험용) 2·3대 계획의 조각 길이를 N mm 로(원래 길이는 첫 후보 안전장치 길이, 아래 계산량 한도)
   --eval  분석용: 후보를 전부 끝까지 계획해 짧은 시험의 예상과 실제 makespan 을 함께 적는다(시간이 더 든다)
   --ls N  국소 탐색: 층마다 가장 늦게 끝난 로봇의 부채꼴 경계를 옮겨 최대 N 번 다시 계획해 본다(기본 2, 0=안 함)
   --budget N  계산량 한도(충돌 검사 횟수, 기본 BUDGET, 0=한도 없음)
@@ -31,7 +32,9 @@ usage: python solve.py <job_dir> <out_dir> [--eval] [--ls N] [--budget N]   (WAA
 계산량 한도(2026-11-25): 최종 테스트는 코랩 무료 CPU 에서 형상마다 5분 안이어야 한다. 코랩은 노트북보다
 계획·국소 탐색이 1.9배 느려(경로 계산은 거의 같다) 공개 04 가 342 s 였다. 시간으로 끊으면 컴퓨터마다 답이
 달라지므로, 대신 충돌 검사 횟수를 센다(어느 컴퓨터에서나 같은 값). 짧은 시험·끝까지 계획·국소 탐색을 합쳐
-BUDGET 번까지만 쓴다: 첫 후보는 계획이 하나는 있어야 하므로 늘 끝까지, 그다음 후보는 남은 만큼만(넘으면 멈추고
+BUDGET 번까지만 쓴다(첫 후보 안전장치(2026-11-29): 설정에 --chunk-safe 가 있으면 첫 후보가 끝까지 갔을 때의 검사
+횟수가 남은 몫을 넘을 것 같을 때 남은 층을 그 길이로 짠다. 지금 후보 설정에는 없고 --chunk 로 시험할 때만 켜진다):
+첫 후보는 계획이 하나는 있어야 하므로 늘 끝까지, 그다음 후보는 남은 만큼만(넘으면 멈추고
 안 고름), 국소 탐색은 고른 설정을 다시 계획하는 몫(cost[best])을 뺀 나머지를 층마다 나눠 쓴다. 한도 안에 드는
 형상은 결과가 그대로다(공개 01·02·03·06 궤적 바이트 단위로 같음).
   코랩에서 충돌 검사 1번 ≈ 0.64 ms(04: 계획+국소 탐색 296 s / 462,565번), 32만 번 ≈ 205 s.
@@ -64,6 +67,7 @@ KEEP = 0.10         # 짧은 시험에서 가장 빠른 후보보다 이 비율 
 SAMPLE2_FRAC = 0.05  # 남은 후보가 둘 이상이면 2차로 전체 층의 이 비율(최소 SAMPLE2_MIN 층)을 더 시험한다
 SAMPLE2_MIN = 8     # (05 는 350층 중 106층에서만 설정 차이가 나서 1차 4층으로는 셋이 똑같이 나왔다)
 BUDGET = 320_000    # 계산량 한도(충돌 검사 횟수, 0=한도 없음): 후보 계획과 국소 탐색을 합쳐 이만큼만 쓴다(위 설명)
+CHUNK = None        # (--chunk, 시험용) 2·3대 계획의 조각 길이(mm). 원래 길이는 첫 후보 안전장치 길이(--chunk-safe)로 쓴다
 
 
 def candidates(f: dict) -> list[str]:
@@ -181,7 +185,14 @@ def uses_sectors(name: str) -> bool:
 
 
 def options(name: str, job: Path, out: Path):
-    return s8.parser().parse_args([str(job), str(out), *VARIANTS[name][1]])
+    o = s8.parser().parse_args([str(job), str(out), *VARIANTS[name][1]])
+    if CHUNK and o.robots != 1:
+        # (--chunk) 2·3대 계획만 조각 길이를 바꾼다(1대는 막힐 일이 거의 없어 그대로). 원래 길이가 더 길면 첫 후보
+        # 안전장치 길이로 둔다: 충돌 검사가 남은 몫을 넘을 것 같으면 남은 층은 원래 길이로 짠다
+        orig, o.chunk = float(o.chunk), float(CHUNK)
+        if orig > o.chunk:
+            o.chunk_safe = orig
+    return o
 
 
 def main() -> int:
@@ -202,7 +213,11 @@ def main() -> int:
                          f"몫만 쓴다(기본 {BUDGET:,}, 0=한도 없음)")
     ap.add_argument("--extra", default=None,
                     help="(실험용) 두 대 이상이 동시에 쌓을 수 있는 형상의 후보 끝에 이 설정들을 더한다(쉼표로 구분)")
+    ap.add_argument("--chunk", type=float, default=None,
+                    help="(시험용) 2·3대 계획의 조각 길이(mm). 원래 길이(2대 160·3대 220)는 첫 후보 안전장치 길이로 쓴다")
     a = ap.parse_args()
+    global CHUNK
+    CHUNK = a.chunk
     toolpath.FAST_VORONOI = not a.slow_voronoi
     job, out = Path(a.job).resolve(), Path(a.out).resolve()
     T = {}
@@ -230,22 +245,28 @@ def main() -> int:
         return s8.run(job, options(nm, job, out), pre=pre, path_cache=caches[VARIANTS[nm][2]], only=only)[1]
 
     cost = {}                                       # 후보별로 끝까지 계획하는 데 든 충돌 검사 횟수
+    switched = {}                                   # 첫 후보 안전장치로 남은 층을 긴 조각으로 바꾼 층(후보별)
 
     def plan(nm, bound):
         c0 = s8.CHECKS
-        cap = None
+        cap = soft = None
         if a.budget > 0 and cost:
             # 계산량 한도: 첫 후보는 계획이 하나는 있어야 하므로 끝까지 계획하고, 그다음 후보부터는 한도에서
             # 남은 만큼만 계획한다(넘으면 가지치기처럼 멈추고 고르지 않는다)
             cap = a.budget - (c0 - c_plan)
             if cap <= 0:
                 return None
+        elif a.budget > 0:
+            # 첫 후보 안전장치: 끝까지 짜되, 남은 몫을 넘을 것 같으면 남은 층은 그 설정의 --chunk-safe 길이로 짠다
+            soft = a.budget - (c0 - c_plan)
         try:
             robots, mk, *_ = s8.run(job, options(nm, job, out), pre=pre, path_cache=caches[VARIANTS[nm][2]],
-                                    bound=bound, work_cap=cap)
+                                    bound=bound, work_cap=cap, soft_cap=soft)
         except s8.Pruned:
             return None
         cost[nm] = s8.CHECKS - c0
+        if s8.SWITCHED_AT is not None:
+            switched[nm] = s8.SWITCHED_AT
         return mk, robots
 
     c_plan = s8.CHECKS
@@ -268,6 +289,7 @@ def main() -> int:
             t = time.perf_counter()
             o = options(best, job, out)
             o.ls, o.ls_warm, o.ls_budget = a.ls, a.ls_warm, left
+            o.switch_at = switched.get(best)        # 안전장치로 바꾼 계획이면 같은 층부터 긴 조각으로(같은 기준 계획)
             o.ls_rate = None if left is None else left / max(cost[best], 1)
             c_ls = s8.CHECKS
             r2, mk2, *_ = s8.run(job, o, pre=pre, path_cache=caches[VARIANTS[best][2]])
@@ -294,6 +316,10 @@ def main() -> int:
         fu = f"{full[nm]:.3f}" if nm in full else ""
         lines.append(f"{nm}\t{tr}\t{fu}")
     lines.append(f"best\t{best}")
+    if CHUNK:
+        lines.append(f"chunk\t{CHUNK:g}")              # (--chunk) 2·3대 계획의 조각 길이
+    for nm, k in switched.items():
+        lines.append(f"safe\t{nm} layer={k}")       # 첫 후보 안전장치: 이 층부터 긴 조각으로 짰다
     if ls_line:
         lines.append(ls_line)
     lines.append(f"checks\tplan={used} ls={ls_checks} total={used + ls_checks}")
@@ -302,7 +328,8 @@ def main() -> int:
     print(f"{job.name}: 후보 {len(names)}개 → {best} makespan={mk:.1f}s 계산 {T['total']:.1f}s "
           f"(자르기 {T['slice']:.1f} 특징 {T['features']:.1f} 경로 {T['paths']:.1f} 시험·계획 {T['plan']:.1f}"
           + (f" 국소 탐색 {T['ls']:.1f}" if "ls" in T else "") + f") 충돌 검사 {used + ls_checks:,}번"
-          + (" (한도로 국소 탐색 건너뜀)" if ls_line and ls_line.startswith("ls\tskip") else ""),
+          + (" (한도로 국소 탐색 건너뜀)" if ls_line and ls_line.startswith("ls\tskip") else "")
+          + "".join(f" (안전장치: {nm} 층 {k}부터 긴 조각)" for nm, k in switched.items()),
           flush=True)
     return 0
 

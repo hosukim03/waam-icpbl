@@ -52,6 +52,11 @@ REACH_LIM = 1499.0  # 국소 탐색이 옮긴 배정을 버리는 기준: 채점
                     # REACH_OK 로 버리면 그런 층에서는 경계를 옮긴 시도가 모두 버려진다(연습 09·새 형상 19 이득 0).
 PRUNE_MIN_FRAC = 0.2   # 예상 완료 시각으로 가지치기할 때 최소 진행률
 PRUNE_MARGIN = 1.15    # 예상 makespan 이 최선의 이 배수를 넘어야 멈춘다
+# 첫 후보 안전장치(2026-11-29): 첫 후보는 계획이 하나는 있어야 해서 계산량 한도와 상관없이 끝까지 짠다. 조각이 짧으면
+# 충돌 검사가 한도를 크게 넘을 수 있어(80 mm 에서 연습 1 19 가 112만 번 = 한도의 3.5배), 끝까지 갔을 때의 검사 횟수
+# (지금까지 쓴 횟수 ÷ 진행한 적층 길이 비율)가 남은 몫(soft_cap)을 넘을 것 같으면 남은 층은 --chunk-safe 길이로 짠다.
+SAFE_MIN_FRAC = 0.05   # 적층 길이로 이만큼 진행한 뒤부터 어림한다(너무 이르면 어림이 흔들림)
+SWITCHED_AT = None     # 마지막 run() 에서 남은 층을 안전 길이로 바꾼 층(안 바꿨으면 None, solve.py 가 읽는다)
 
 
 # ---------------------------------------------------------------- 기하
@@ -992,11 +997,16 @@ def prepare(job: Path):
     return cfg, n, slice_target_layers(mesh, list(range(n)), cfg)
 
 
-def run(job: Path, opts, policy=None, pre=None, path_cache=None, only=None, bound=None, work_cap=None):
+def run(job: Path, opts, policy=None, pre=None, path_cache=None, only=None, bound=None, work_cap=None,
+        soft_cap=None):
     """pre = prepare() 결과(없으면 여기서 읽는다), path_cache = {층: (경로, IoU)},
     only = 이 층들만 계획한다(설정을 짧게 시험할 때), bound = 이미 끝난 설정의 최선 makespan(가지치기,
     --bound-file 과 같은 규칙), work_cap = 이 계획에 쓸 충돌 검사 횟수 한도(넘으면 층을 시작할 때 Pruned 로
-    멈춘다, 계산량 한도). 나머지는 명령행 실행과 같다."""
+    멈춘다, 계산량 한도), soft_cap = 첫 후보 안전장치(끝까지 갔을 때의 검사 횟수가 이것을 넘을 것 같으면 남은 층은
+    opts.chunk_safe 로 짠다; opts.switch_at 이 있으면 어림하지 않고 그 층부터 바꾼다 = 국소 탐색이 같은 계획을
+    다시 짤 때). 나머지는 명령행 실행과 같다."""
+    global SWITCHED_AT
+    SWITCHED_AT = None
     c_run = CHECKS
     cfg, n, layers = pre if pre is not None else prepare(job)
     apply_config(cfg, bool(opts.arc))
@@ -1044,9 +1054,12 @@ def run(job: Path, opts, policy=None, pre=None, path_cache=None, only=None, boun
             path_cache = pickle.load(_f)
     bound_file = getattr(opts, "bound_file", None)
     reuse_prev, prev_paths = bool(getattr(opts, "reuse_prev", False)), None
-    # 예상 완료 시각으로 가지치기하려면 전체 적층 길이가 필요하다(경로 캐시가 있을 때만)
+    # 첫 후보 안전장치: 바꿀 길이(chunk_safe)가 지금 길이보다 길고, 어림할 몫(soft_cap)이나 바꿀 층(switch_at)이 있을 때만
+    chunk_safe, switch_at = getattr(opts, "chunk_safe", None), getattr(opts, "switch_at", None)
+    guard = bool(chunk_safe) and float(chunk_safe) > float(opts.chunk) and (soft_cap is not None or switch_at is not None)
+    # 예상 완료 시각으로 가지치기하거나 안전장치로 어림하려면 전체 적층 길이가 필요하다(경로 캐시가 있을 때만)
     lens = {}
-    if (bound_file or bound is not None) and path_cache is not None:
+    if (bound_file or bound is not None or guard) and path_cache is not None:
         lens = {k: sum(plen(np.asarray(Q)) for Q in path_cache[k][0])
                 for k in path_cache if path_cache[k][0]}
     total_len, done_len = float(sum(lens.values())), 0.0
@@ -1056,6 +1069,16 @@ def run(job: Path, opts, policy=None, pre=None, path_cache=None, only=None, boun
             continue
         if work_cap is not None and CHECKS - c_run > work_cap:
             raise Pruned(f"layer {k}: 충돌 검사 {CHECKS - c_run} > 한도 {work_cap:.0f}")
+        if guard and SWITCHED_AT is None:
+            if switch_at is not None:
+                hit = k >= int(switch_at)
+            else:
+                used = CHECKS - c_run
+                frac = done_len / total_len if total_len > 0 else 0.0
+                hit = used > soft_cap or (frac >= SAFE_MIN_FRAC and used / frac > soft_cap)
+            if hit:                                  # 이미 짠 층은 그대로 두고, 이 층부터 긴 조각으로
+                opts.chunk = float(chunk_safe)
+                SWITCHED_AT = k
         if bound_file or bound is not None:
             # 가지치기: 포트폴리오에서 먼저 끝난 설정의 makespan 이 여기 적힌다. 지금 로봇 시각이 이미
             # 그보다 크면 이 설정은 절대 이길 수 없으므로(시각은 줄지 않음) 바로 멈춘다. 결과는 그대로.
@@ -1145,6 +1168,8 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--arc", dest="arc", action="store_true", help="아크 켜기·끄기 대기를 W 로 넣는다")
     ap.add_argument("--no-arc", dest="arc", action="store_false", help="(기본값, 예전 명령 호환용)")
     ap.add_argument("--chunk", type=float, default=40.0)
+    ap.add_argument("--chunk-safe", dest="chunk_safe", type=float, default=None,
+                    help="첫 후보 안전장치: 충돌 검사가 남은 몫을 넘을 것 같으면 남은 층을 이 조각 길이(mm)로 짠다")
     ap.add_argument("--band", type=float, default=60.0)
     ap.add_argument("--paths", default=None, help="toolpath_cache.py 로 미리 계산한 층별 경로 파일")
     ap.add_argument("--lookahead", type=int, default=6)
