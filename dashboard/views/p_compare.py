@@ -1,7 +1,7 @@
 import plotly.graph_objects as go
 import streamlit as st
 
-from data import SET_NOTE, eval_index, run_table
+from data import SET_NOTE, SETTING_NOTE, eval_index, run_table
 from theme import badge, chart, header, pal, style
 
 header("실험 비교", "같은 묶음에서 두 실험을 형상별로 비교합니다. 기준 실험 대비 비교 실험이 얼마나 바뀌었는지 봅니다.")
@@ -24,7 +24,7 @@ m = ta.merge(tb, on="형상", suffixes=(" 기준", " 비교"))
 m["차이(s)"] = m["makespan(s) 비교"] - m["makespan(s) 기준"]
 m["차이(%)"] = 100 * m["차이(s)"] / m["makespan(s) 기준"]
 
-c = st.columns(4)
+c = st.columns([1.4, 1, 1, 1])                         # 첫 칸을 넓혀 변화율 배지가 숫자 오른쪽에 들어가게
 sa, sb = m["makespan(s) 기준"].sum(), m["makespan(s) 비교"].sum()
 c[0].metric("makespan 합계", f"{sb:,.1f} s", f"{(sb / sa - 1) * 100:+.2f}%", delta_color="inverse", border=True)
 na, nb = int((m["통과 기준"] == "PASS").sum()), int((m["통과 비교"] == "PASS").sum())
@@ -36,6 +36,9 @@ ch = m[(m["차이(s)"].abs() > 0.05) | (m["통과 기준"] != m["통과 비교"]
 if ch.empty:
     st.success("두 실험의 결과가 형상마다 같습니다.")
     st.stop()
+same = sorted(set(m["형상"]) - set(ch["형상"]))
+st.caption(f"형상 {len(m)}개 중 결과가 바뀐 {len(ch)}개만 보입니다." +
+           (f" 나머지 {len(same)}개({', '.join(same)})는 두 실험에서 makespan 과 통과가 같아 뺐습니다." if same else ""))
 fig = go.Figure(go.Bar(
     y=ch["형상"], x=ch["차이(%)"], orientation="h",
     marker_color=[P["better"] if v < 0 else P["worse"] for v in ch["차이(%)"]],
@@ -51,10 +54,10 @@ chart(fig)
 
 view = ch.assign(**{"통과 기준": ch["통과 기준"].map(badge), "통과 비교": ch["통과 비교"].map(badge)})
 cols = ["형상", "모양 기준", "통과 기준", "통과 비교", "makespan(s) 기준", "makespan(s) 비교", "차이(s)", "차이(%)",
-        "고른 설정 기준", "고른 설정 비교", "겹침 점수(%) 기준", "겹침 점수(%) 비교"]
+        "계획 기준", "계획 비교", "겹침 점수(%) 기준", "겹침 점수(%) 비교"]
 st.dataframe(view[cols].rename(columns={"모양 기준": "모양"}), hide_index=True, width="stretch",
              column_config={k: st.column_config.NumberColumn(format="%.1f") for k in ("makespan(s) 기준", "makespan(s) 비교")} |
                            {"차이(s)": st.column_config.NumberColumn(format="%+.1f"), "차이(%)": st.column_config.NumberColumn(format="%+.2f"),
                             "겹침 점수(%) 기준": st.column_config.NumberColumn(format="%.2f"),
                             "겹침 점수(%) 비교": st.column_config.NumberColumn(format="%.2f")})
-st.caption("풀이 시간은 여러 형상을 동시에 돌린 값이라 비교에 쓰지 않습니다. 계산 시간 비교는 '계산 시간 (코어 1개)'를 보세요.")
+st.caption(SETTING_NOTE)

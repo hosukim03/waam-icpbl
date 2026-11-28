@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 RUNS = ROOT / "runs"
 SET_NAMES = {"tests": "공개 6", "check1010_v102": "연습 1", "novel1027": "연습 2", "parts1126": "연습 3"}
 SET_NOTE = {"tests": "교수님이 공개한 형상 6개(채점 대상과 같은 종류)",
-            "check1010_v102": "우리 생성기의 21종류를 하나씩(21개), 설정을 고를 때 결과를 본 연습용",
+            "check1010_v102": "우리 생성기의 21종류를 하나씩(21개), 후보 계획을 정할 때 결과를 본 연습용",
             "novel1027": "21종류와 다른 방식으로 만든 형상 21개(처음 보는 종류)",
             "parts1126": "실제 부품을 본뜬 형상 21개(연습 1·2와 다른 방식, 처음 보는 종류)"}
 # 대시보드에서 숨기는 묶음(2026-11-25): fresh1027 은 연습 1 과 같은 생성기에 시드만 바꾼 묶음이라 이름만 늘려
@@ -37,6 +37,31 @@ EXP_TITLES = {"1027a_80mm": "80 mm 조각 후보 더함", "1027b_fix": "점수 �
 TIMING_TITLES = {"1027_공개_지금_A_B": "80 mm 조각 후보 비교", "1027_공개_B_고치기전후": "점수 계산 고치기 전후",
                  "1027_새방식_지금_B": "80 mm 조각 후보 비교", "1028_공개_국소탐색_횟수": "국소 탐색 횟수 비교",
                  "1124_공개_코랩": "노트북과 코랩 비교", "1126_연습3_노트북": "연습 3 첫 측정"}
+# 계획 화면 이름(2026-11-27): 풀이는 형상마다 후보 계획 몇 개를 짜 보고 makespan 이 가장 짧은
+# 계획을 고른다(화면에서는 '설정' 대신 '계획'·'후보 계획'이라 부른다, 사용자 결정). 코드
+# (src/portfolio.py: sp_=나선 경로, r=로봇 수, c=조각 mm, bal=일 양 고르게, m5=팔 여유 5 mm, a=두 로봇 방향 엇갈림,
+# rp=아래층 경로 재사용, tuned=자동 탐색 값)는 처음 보는 사람이 못 읽어서 화면에는 이 이름을 쓴다. 모든 후보에 공통인
+# 것(나선 경로, 2·3대의 팔 여유 5 mm, 2대의 방향 엇갈림)과 1대의 조각 길이는 뺐다. 여기 없는 새 코드는 코드 그대로 보인다.
+SETTING_NAMES = {"sp_r1c160": "로봇 1대", "sp_r1c160rp": "로봇 1대 · 아래층 경로 재사용",
+                 "sp_r2c160m5a": "로봇 2대 · 160 mm씩 나눔", "sp_r2c80m5a": "로봇 2대 · 80 mm씩 나눔",
+                 "sp_r2c160m5arp": "로봇 2대 · 160 mm씩 나눔 · 아래층 경로 재사용",
+                 "sp_r3c220balm5rp": "로봇 3대 · 220 mm씩 나눔 · 일 양 고르게 · 아래층 경로 재사용",
+                 "r3tuned": "로봇 3대 · 41.4 mm씩 나눔 · 숫자 자동 탐색"}
+SETTING_NOTE = ("**계획**: 프로그램은 형상마다 계획을 몇 가지 짜 보고, 가장 빨리 끝나는 계획을 고릅니다. "
+                "계획 이름에 나오는 말의 뜻:\n\n"
+                "- **로봇 N대**: 로봇 몇 대가 나눠서 쌓는지\n"
+                "- **N mm씩 나눔**: 로봇마다 맡은 구역의 길을 N mm 이하 조각으로 똑같이 잘라 한 조각씩 쌓음. 조각을 "
+                "시작할 때마다 다른 로봇과 부딪히지 않는지 보고, 부딪힐 것 같으면 기다림(짧게 자를수록 자주 확인해서 덜 기다림)\n"
+                "- **일 양 고르게**: 로봇마다 맡는 양이 비슷해지게 구역을 나눔\n"
+                "- **아래층 경로 재사용**: 바로 아래층에서 쓴 길이 이 층 모양에도 맞으면 새로 만들지 않고 그대로 씀\n"
+                "- **숫자 자동 탐색**: 조각 길이(41.4 mm) 같은 숫자를 사람이 정하지 않고, 컴퓨터가 숫자 묶음을 10벌씩 뽑아 "
+                "형상 30개로 시험하고 잘 된 3벌 근처로 범위를 좁혀 다시 뽑기를 5번 해서 찾은 것(사람이 정한 다른 계획은 "
+                "160·220 mm처럼 딱 떨어지는 숫자)")
+
+
+def setting_name(code) -> str:
+    """계획 코드 → 화면 이름. 모르는 코드는 그대로."""
+    return SETTING_NAMES.get(code, code) if isinstance(code, str) else ""
 # 형상 칸에 보일 모양 이름(2026-11-25): 형상을 만든 설정(data/<묶음>/<형상>/desc.txt)의 영어 낱말 → 한국어. 이름은
 # 생성기에 적힌 것을 따른다(연습 1: tools/make_jobs_diverse.py 머리말, 연습 2·3: tools/make_jobs_novel.py·make_jobs_parts.py 의 KO).
 SHAPE_KO = {"line": "막대", "ring": "원형 벽", "rect": "사각 벽", "block": "작은 속찬 덩어리", "wave": "물결선",
@@ -150,7 +175,8 @@ def run_table(name: str, set_dir: str) -> pd.DataFrame:
         bb = b.get(d.name, {})
         rows.append({"형상": d.name, "모양": shape_name(dsc, set_name, d.name), "난이도": first if first in LEVELS else "",
                      "설명": dsc, "층수": bb.get("layers"),
-                     "고른 설정": s["best"], "makespan(s)": ms, "통과": sm.get("status", "?"),
+                     "계획": setting_name(s["best"]), "계획 코드": s["best"],
+                     "makespan(s)": ms, "통과": sm.get("status", "?"),
                      "겹침 점수(%)": 100 * sh.get("iou", float("nan")), "덮은 비율(%)": 100 * sh.get("coverage", float("nan")),
                      "넘친 비율(%)": 100 * sh.get("overfill_ratio", float("nan")),
                      "실패 층": sh.get("failed_layer_count"), "충돌": sm.get("collision", {}).get("collision_event_count"),
@@ -200,7 +226,7 @@ def timing_table(name: str) -> pd.DataFrame:
             # 국소 탐색을 쓴 줄은 'after=… used=1' 이 실제 makespan 이다(makespan 칸은 국소 탐색 전 값)
             a = re.search(r"after=([\d.]+) used=1", ln)
             rows.append({"형상": m.group(1), "방법": WAY_NAMES.get(m.group(2), m.group(2)), "계산 시간(s)": float(m.group(3)),
-                         "makespan(s)": float(a.group(1) if a else m.group(4)), "고른 설정": m.group(5)})
+                         "makespan(s)": float(a.group(1) if a else m.group(4)), "계획": m.group(5)})
     return pd.DataFrame(rows)
 
 
@@ -231,7 +257,7 @@ def motion(name: str, shape: str, set_dir: str) -> dict | None:
     """궤적의 구간(행 i → i+1)을 로봇·층·종류로 나눈다. 종류: D 쌓기, T 이동하기, W 기다리기, E 층 끝 기다리기.
     층은 쌓는 높이(z)로 정하고, 쌓지 않는 구간은 그 로봇이 다음에 쌓는 층에 넣는다. 다만 한 층의 마지막 쌓기 바로 뒤에
     이어지는 기다림은 다른 로봇이 그 층을 끝내기를 기다리는 시간이라 앞 층의 '층 끝 기다림'(E)으로 둔다.
-    로봇이 그 층에서 쌓지 않으면(2대 설정의 세 번째 로봇 등) 시간으로 층을 정한다."""
+    로봇이 그 층에서 쌓지 않으면(2대 계획의 세 번째 로봇 등) 시간으로 층을 정한다."""
     import numpy as np
     import yaml
     d = RUNS / "evals" / name / shape

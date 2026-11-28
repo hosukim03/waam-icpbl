@@ -38,8 +38,8 @@ c = st.columns(4)
 c[0].metric("결과", badge(t.loc[sh, "통과"]), border=True)
 c[1].metric("기준 미달 층", f"{int(bad_mask.sum())} / {len(d)}", border=True)
 low = d["iou"].min() * 100
-c[2].metric("가장 낮은 층 겹침 점수", f"{low:.2f}%", delta=f"{low - IOU_MIN * 100:+.2f}%p (기준 {IOU_MIN * 100:.0f}% 이상)",
-            border=True)
+c[2].metric(f"가장 낮은 층 겹침 점수 (기준 {IOU_MIN * 100:.0f}%)", f"{low:.2f}%", delta=f"{low - IOU_MIN * 100:+.2f}%p",
+            border=True)                               # 배지를 짧게 해 숫자 오른쪽에 들어가게
 c[3].metric("makespan", f"{t.loc[sh, 'makespan(s)']:,.1f} s", border=True)
 
 # 합격 기준: 채점기 검사 전부(궤적 규칙·팔 닿는 거리·충돌·모양 4가지)와 이 형상의 값. 하나라도 못 넘으면 실패

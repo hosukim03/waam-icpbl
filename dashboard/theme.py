@@ -40,6 +40,9 @@ h2, h3 {{ font-weight: 650 !important; letter-spacing: -0.005em; }}
 h3 {{ font-size: 1.12rem !important; margin-top: 1.4rem !important; }}
 [data-testid="stMetricValue"] {{ font-size: 1.6rem; font-weight: 600; }}
 [data-testid="stMetricLabel"] p {{ font-size: 0.86rem; }}
+/* 변화율 배지(▲ +4.2% 같은 것)를 숫자 아래가 아니라 오른쪽에. 칸이 좁으면 아래로 내려간다(2026-11-27) */
+[data-testid="stMetric"] > div {{ display: flex; flex-wrap: wrap; align-items: center; column-gap: 0.6rem; }}
+[data-testid="stMetric"] > div > label {{ flex: 0 0 100%; }}
 [data-testid="stCaptionContainer"] {{ line-height: 1.5; }}
 .waam-hero {{ font-size: 3.1rem; font-weight: 650; line-height: 1.1; margin: 0.2rem 0 0.1rem; }}
 .waam-hero-label {{ font-size: 0.92rem; opacity: 0.75; }}
@@ -80,9 +83,11 @@ def shape_option(k: str, row) -> str:
 
 
 def shape_note(row) -> str:
-    """형상 칸 아래 작은 글씨: 고른 설정 코드와 형상을 만든 설정(생성기가 적은 원래 글)."""
-    pick, made = _txt(row.get("고른 설정")), _txt(row.get("설명")).replace("~", "\\~")
-    return " · ".join(x for x in (f"고른 설정 `{pick}`" if pick else "", f"만든 설정: {made}" if made else "") if x)
+    """형상 칸 아래 작은 글씨: 계획(화면 이름, 괄호 안은 프로그램 안 코드)과 형상 설정(생성기가 형상을 만들며 적은 원래 글)."""
+    pick, code, made = _txt(row.get("계획")), _txt(row.get("계획 코드")), _txt(row.get("설명")).replace("~", "\\~")
+    if pick:
+        pick = f"계획: {pick}" + (f" (`{code}`)" if code and code != pick else "")
+    return " · ".join(x for x in (pick, f"형상 설정: {made}" if made else "") if x)
 
 
 def style(fig: go.Figure, height: int = 360, legend: bool = True, title: str | None = None) -> go.Figure:

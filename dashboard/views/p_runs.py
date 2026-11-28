@@ -2,7 +2,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from data import SET_NOTE, eval_index, run_table
+from data import SET_NOTE, SETTING_NOTE, eval_index, run_table, setting_name
 from theme import badge, chart, header, pal, shape_note, shape_option, style
 
 header("묶음 결과", "형상 묶음 하나에서 실험 하나의 결과입니다. 풀이 시간은 여러 형상을 동시에 돌린 값이라 참고만 합니다"
@@ -47,9 +47,9 @@ chart(fig)
 
 show = t.drop(columns=["_cands"]).assign(통과=t["통과"].map(badge))
 st.dataframe(show, hide_index=True, width="stretch", height=min(36 * (len(show) + 1) + 4, 800),
-             column_order=["형상", "모양", "통과", "makespan(s)", "최소의 몇 배", "고른 설정", "겹침 점수(%)", "실패 층", "충돌",
+             column_order=["형상", "모양", "통과", "makespan(s)", "최소의 몇 배", "계획", "겹침 점수(%)", "실패 층", "충돌",
                            "층수", "덮은 비율(%)", "넘친 비율(%)", "이론상 최소(s)", "풀이 시간(s)", "설명"],
-             column_config={"설명": st.column_config.TextColumn("만든 설정", width="medium"),
+             column_config={"설명": st.column_config.TextColumn("형상 설정", width="medium"),
                             "makespan(s)": st.column_config.NumberColumn(format="%.1f"),
                             "겹침 점수(%)": st.column_config.NumberColumn(format="%.2f"),
                             "덮은 비율(%)": st.column_config.NumberColumn(format="%.2f"),
@@ -57,16 +57,23 @@ st.dataframe(show, hide_index=True, width="stretch", height=min(36 * (len(show) 
                             "이론상 최소(s)": st.column_config.NumberColumn(format="%.0f"),
                             "최소의 몇 배": st.column_config.NumberColumn(format="%.2f"),
                             "풀이 시간(s)": st.column_config.NumberColumn("풀이 시간(s, 동시 실행)", format="%.1f")})
+st.caption(SETTING_NOTE)
 
-with st.expander("형상별 후보 설정 비교 (짧은 시험과 끝까지 계획한 makespan)"):
-    st.caption("짧은 시험: 고르게 뽑은 4개 층만 계획해 본 makespan. 가장 빠른 것보다 10% 넘게 느린 후보는 끝까지 계획하지 않습니다. "
-               "'끝까지'가 비어 있으면 중간에 멈춘 후보입니다(후보를 전부 끝까지 계획한 실험에서만 다 찹니다).")
+with st.expander("형상별 후보 계획 비교 (짧은 시험과 끝까지 짠 makespan)"):
+    st.caption("이 형상에서 후보 계획 중 하나를 고른 과정입니다.\n\n"
+               "1. **짧은 시험**: 모든 층을 짜면 오래 걸려서, 높이별로 고르게 뽑은 4개 층만 계획마다 먼저 짜 보고 "
+               "걸리는 시간을 잽니다(전체 시간이 아니라 순서를 정하는 값, 층이 8개 이하면 이 단계 없이 모두 끝까지). 가장 빠른 "
+               "계획보다 10% 넘게 느린 계획은 여기서 뺍니다.\n"
+               "2. **끝까지**: 짧은 시험에서 빠른 계획부터 모든 층을 짭니다. 도중에 앞서 끝낸 계획보다 느려질 게 "
+               "확실해지거나 계산량 한도에 닿으면 그 자리에서 멈추므로 칸이 빕니다(분석용으로 모든 계획을 끝까지 짠 실험은 다 찹니다).\n"
+               "3. 끝까지 간 계획 중 가장 빨리 끝나는 것을 고릅니다(◀ 고름).")
     ti = t.set_index("형상")
     sh = st.selectbox("형상", t["형상"], format_func=lambda k: shape_option(k, ti.loc[k]))
     row = ti.loc[sh]
     st.caption(shape_note(row))
-    cands = pd.DataFrame([{"후보 설정": k, "짧은 시험(s)": v[0], "끝까지(s)": v[1], "고름": "◀ 고름" if k == row["고른 설정"] else ""}
+    cands = pd.DataFrame([{"후보 계획": setting_name(k), "짧은 시험(s)": v[0], "끝까지(s)": v[1],
+                           "고름": "◀ 고름" if k == row["계획 코드"] else ""}
                           for k, v in row["_cands"].items()])
-    st.dataframe(cands, hide_index=True, width="stretch",
+    st.dataframe(cands, hide_index=True, width="stretch", placeholder="",   # 멈춘 후보의 '끝까지'는 빈칸(None 대신)
                  column_config={"짧은 시험(s)": st.column_config.NumberColumn(format="%.1f"),
                                 "끝까지(s)": st.column_config.NumberColumn(format="%.1f")})
