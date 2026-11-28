@@ -8,11 +8,14 @@ import streamlit as st
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNS = ROOT / "runs"
-SET_NAMES = {"tests": "공개 6", "check1010_v102": "연습 1", "novel1027": "연습 2", "parts1126": "연습 3"}
+SET_NAMES = {"tests": "공개 6", "check1010_v102": "연습 1", "novel1027": "연습 2", "parts1126": "연습 3",
+             "formula1128": "연습 4"}
 SET_NOTE = {"tests": "교수님이 공개한 형상 6개(채점 대상과 같은 종류)",
             "check1010_v102": "우리 생성기의 21종류를 하나씩(21개), 후보 계획을 정할 때 결과를 본 연습용",
             "novel1027": "21종류와 다른 방식으로 만든 형상 21개(처음 보는 종류)",
-            "parts1126": "실제 부품을 본뜬 형상 21개(연습 1·2와 다른 방식, 처음 보는 종류)"}
+            "parts1126": "실제 부품을 본뜬 형상 21개(연습 1·2와 다른 방식, 처음 보는 종류)",
+            "formula1128": "3D 공간에서 수식으로 정한 모양 21개(수식 3D 격자·녹여 붙인 덩어리·휘감아 올라가는 관 7개씩, "
+                           "연습 1·2·3과 다른 방식)"}
 # 대시보드에서 숨기는 묶음(2026-11-25): fresh1027 은 연습 1 과 같은 생성기에 시드만 바꾼 묶음이라 이름만 늘려
 # 헷갈리게 해서 뺀다. 자료(runs/evals, data/)는 그대로 둔다.
 HIDDEN_SETS = {"fresh1027"}
@@ -65,7 +68,8 @@ def setting_name(code) -> str:
     """계획 코드 → 화면 이름. 모르는 코드는 그대로."""
     return SETTING_NAMES.get(code, code) if isinstance(code, str) else ""
 # 형상 칸에 보일 모양 이름(2026-11-25): 형상을 만든 설정(data/<묶음>/<형상>/desc.txt)의 영어 낱말 → 한국어. 이름은
-# 생성기에 적힌 것을 따른다(연습 1: tools/make_jobs_diverse.py 머리말, 연습 2·3: tools/make_jobs_novel.py·make_jobs_parts.py 의 KO).
+# 생성기에 적힌 것을 따른다(연습 1: tools/make_jobs_diverse.py 머리말, 연습 2·3·4: tools/make_jobs_novel.py·make_jobs_parts.py·
+# make_jobs_formula.py 의 KO).
 SHAPE_KO = {"line": "막대", "ring": "원형 벽", "rect": "사각 벽", "block": "작은 속찬 덩어리", "wave": "물결선",
             "hexgrid": "벌집", "trigrid": "삼각 격자", "sqgrid": "사각 격자", "spiral": "나선", "truss": "삼각 트러스",
             "islands": "떨어진 섬 여러 개", "star": "별 모양 벽", "plate": "판+기둥", "vase": "비틀린 꽃병",
@@ -77,7 +81,8 @@ SHAPE_KO = {"line": "막대", "ring": "원형 벽", "rect": "사각 벽", "block
             "panel": "보강재 붙은 패널", "column": "H형강 기둥", "pipe": "플랜지 관", "reducer": "지름이 바뀌는 관",
             "nozzle": "노즐", "housing": "상자형 하우징", "wheel": "바퀴(풀리)", "conrod": "커넥팅 로드",
             "spanner": "스패너", "blade": "터빈 날개", "manifold": "유압 블록", "heatsink": "방열판",
-            "cylinder": "보강 원통", "facade": "창 뚫린 벽"}
+            "cylinder": "보강 원통", "facade": "창 뚫린 벽",
+            "lattice": "수식 3D 격자", "blobs": "녹여 붙인 덩어리", "helix": "휘감아 올라가는 관"}
 # 공개 6개는 만든 설정 파일이 없어, 이 형상들을 본떠 만든 연습 1 종류의 이름을 쓴다(make_jobs_diverse.py 머리말)
 PUBLIC_KO = {"01": "벌집", "02": "나선", "03": "삼각 트러스", "04": "판+기둥", "05": "비틀린 꽃병", "06": "L자+보강판"}
 LEVELS = ("쉬움", "중간", "어려움")
